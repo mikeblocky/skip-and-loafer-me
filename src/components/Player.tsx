@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { Icon } from '../icons'
 import { sfx } from '../sfx'
+import type { Cue } from '../lyrics'
 
 const fmt = (t: number) => {
   if (!isFinite(t)) return '0:00'
@@ -21,10 +22,14 @@ export interface PlayerProps {
   artist: string
   artistJp: string
   color: string
+  /** timed lyrics, shown Japanese over English */
+  subs?: Cue[]
 }
 
-/** A plain <video> with our own controls: play, scrub, time, mute, fullscreen. */
-export function Player({ src, poster, kind, title, titleJp, artist, artistJp, color }: PlayerProps) {
+const SUBS_KEY = 'sl-subs'
+
+/** A plain <video> with our own controls: play, scrub, time, subtitles, mute, fullscreen. */
+export function Player({ src, poster, kind, title, titleJp, artist, artistJp, color, subs }: PlayerProps) {
   const frame = useRef<HTMLDivElement>(null)
   const video = useRef<HTMLVideoElement>(null)
   const track = useRef<HTMLDivElement>(null)
@@ -35,6 +40,85 @@ export function Player({ src, poster, kind, title, titleJp, artist, artistJp, co
   const [buf, setBuf] = useState(0)
   const [muted, setMuted] = useState(false)
   const scrubbing = useRef(false)
+  const [cue, setCue] = useState(-1)
+  // how many characters of the current line have been sung (drives the karaoke highlight)
+  const [sung, setSung] = useState(0)
+  const lastCue = useRef(-1)
+  const [subsOn, setSubsOn] = useState(() => {
+    try {
+      return localStorage.getItem(SUBS_KEY) !== 'off'
+    } catch {
+      return true
+    }
+  })
+  // controls show while you're touching the video and slip away after a moment of stillness
+  const [awake, setAwake] = useState(false)
+  const idleTimer = useRef(0)
+  const wake = () => {
+    setAwake(true)
+    clearTimeout(idleTimer.current)
+    idleTimer.current = window.setTimeout(() => setAwake(false), 2200)
+  }
+  useEffect(() => () => clearTimeout(idleTimer.current), [])
+
+  // timeupdate only fires ~4×/s; follow the frame clock while playing so lines land on the beat
+  useEffect(() => {
+    if (!subs) return
+    const v = video.current
+    if (!v) return
+    let raf = 0
+    const step = () => {
+      const now = v.currentTime
+      let i = subs.findIndex((c) => now >= c.start && now < c.end)
+      if (i < 0) {
+        // a short breath between lines: keep the finished line up instead of blinking off
+        let prev = -1
+        subs.forEach((c, j) => c.end <= now && (prev = j))
+        const next = subs[prev + 1]
+        if (prev >= 0 && next && next.start - subs[prev].end < 1 && now < next.start) i = prev
+      }
+      setCue(i)
+      if (i >= 0) {
+        lastCue.current = i
+        const c = subs[i]
+        const n = Array.from(c.jp).length
+        if (now >= c.end) setSung(n)
+        else if (c.k) {
+          // real syllable timing
+          let sungNow = 0
+          for (const [at, count] of c.k) if (now >= at) sungNow = count
+          setSung(sungNow)
+        } else {
+          // no timing given: spread evenly, leaving a short hold on the last note
+          const from = c.start + 0.1
+          const to = c.end - Math.min(0.7, (c.end - c.start) * 0.22)
+          const p = Math.min(1, Math.max(0, (now - from) / (to - from)))
+          setSung(Math.min(n, Math.floor(p * n) + (p > 0 ? 1 : 0)))
+        }
+      }
+    }
+    const loop = () => {
+      step()
+      raf = requestAnimationFrame(loop)
+    }
+    if (playing) loop()
+    else step()
+    return () => cancelAnimationFrame(raf)
+  }, [playing, subs, t])
+
+  /** characters of line i already sung: finished lines stay lit while they fade out */
+  const sungIn = (i: number, n: number) => (i === cue ? sung : i <= lastCue.current && i < (cue < 0 ? lastCue.current + 1 : cue) ? n : 0)
+
+  const toggleSubs = () => {
+    const next = !subsOn
+    setSubsOn(next)
+    sfx.click(next ? 1.1 : 0.9)
+    try {
+      localStorage.setItem(SUBS_KEY, next ? 'on' : 'off')
+    } catch {
+      /* private mode */
+    }
+  }
 
   useEffect(() => {
     const onOther = (e: Event) => {
@@ -84,7 +168,17 @@ export function Player({ src, poster, kind, title, titleJp, artist, artistJp, co
 
   return (
     <figure className={`player${playing ? ' is-playing' : ''}`} style={{ '--c': color } as CSSProperties}>
-      <div className="pl-frame" ref={frame}>
+      <div
+        className={`pl-frame${awake ? ' is-awake' : ''}`}
+        ref={frame}
+        onPointerMove={wake}
+        onPointerDown={wake}
+        onKeyDown={wake}
+        onPointerLeave={() => {
+          clearTimeout(idleTimer.current)
+          setAwake(false)
+        }}
+      >
         <video
           ref={video}
           src={src}
@@ -102,6 +196,31 @@ export function Player({ src, poster, kind, title, titleJp, artist, artistJp, co
             if (v.buffered.length && v.duration) setBuf((v.buffered.end(v.buffered.length - 1) / v.duration) * 100)
           }}
         />
+        {subs && subsOn && started && (
+          <div className="pl-subs" aria-live="off">
+            {subs.map((c, i) => {
+              const chars = Array.from(c.jp)
+              const k = sungIn(i, chars.length)
+              return (
+                <p key={i} className={`pl-line${i === cue ? ' is-on' : ''}`} aria-hidden={i !== cue}>
+                  <span className="pl-jp" lang="ja" aria-label={c.jp}>
+                    {chars.map((ch, j) => (
+                      <span
+                        key={j}
+                        aria-hidden="true"
+                        style={{ '--i': j } as CSSProperties}
+                        className={`pl-k${ch === ' ' ? ' is-gap' : ''}${j < k ? ' is-sung' : ''}${i === cue && j === k - 1 && k < chars.length + 1 ? ' is-now' : ''}`}
+                      >
+                        {ch}
+                      </span>
+                    ))}
+                  </span>
+                  <span className="pl-en">{c.en}</span>
+                </p>
+              )
+            })}
+          </div>
+        )}
         {!started && (
           <button className="pl-big" onClick={toggle} aria-label={`Play ${kind.toLowerCase()}`}>
             <Icon name="play" color="#fff" size={40} />
@@ -138,6 +257,17 @@ export function Player({ src, poster, kind, title, titleJp, artist, artistJp, co
             <span className="pl-fill" style={{ width: `${pct}%` }} />
             <span className="pl-knob" style={{ left: `${pct}%` }} />
           </div>
+          {subs && (
+            <button
+              className={`pl-btn pl-cc${subsOn ? ' is-on' : ''}`}
+              onClick={toggleSubs}
+              aria-pressed={subsOn}
+              aria-label={subsOn ? 'Hide lyrics' : 'Show lyrics'}
+              title={subsOn ? 'Hide lyrics' : 'Show lyrics'}
+            >
+              CC
+            </button>
+          )}
           <button
             className="pl-btn"
             onClick={() => {

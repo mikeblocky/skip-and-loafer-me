@@ -7,6 +7,7 @@ import { Photos } from './Photos'
 import { Player } from './Player'
 import { Icon } from '../icons'
 import { sfx } from '../sfx'
+import { ED_S1, OP_S1 } from '../lyrics'
 
 const s1 = (n: number) => `/anime/s1/${n}.jpg`
 const s2 = (n: number) => `/anime/s2/${n}.webp`
@@ -198,6 +199,7 @@ function SeasonDetail({ s }: { s: SeasonInfo }) {
             artistJp="須田景凪"
             artist="Keina Suda"
             color={C.pink}
+            subs={OP_S1}
           />
           <Player
             src="/anime/s1/ed.mp4"
@@ -208,6 +210,7 @@ function SeasonDetail({ s }: { s: SeasonInfo }) {
             artistJp="逢田梨香子"
             artist="Rikako Aida"
             color={C.violet}
+            subs={ED_S1}
           />
         </div>
       )}
