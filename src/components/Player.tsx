@@ -60,10 +60,12 @@ export function Player({ src, poster, kind, title, titleJp, artist, artistJp, co
   // controls show while you're touching the video and slip away after a moment of stillness
   const [awake, setAwake] = useState(false)
   const idleTimer = useRef(0)
-  const wake = () => {
+  /** touch gets longer: there's no hovering finger to keep the controls up */
+  const wake = (e?: { pointerType?: string }) => {
     setAwake(true)
     clearTimeout(idleTimer.current)
-    idleTimer.current = window.setTimeout(() => setAwake(false), 2200)
+    const touch = e?.pointerType === 'touch' || e?.pointerType === 'pen'
+    idleTimer.current = window.setTimeout(() => setAwake(false), touch ? 4500 : 2200)
   }
   useEffect(() => () => clearTimeout(idleTimer.current), [])
 
@@ -192,10 +194,12 @@ export function Player({ src, poster, kind, title, titleJp, artist, artistJp, co
       <div
         className={`pl-frame${awake ? ' is-awake' : ''}`}
         ref={frame}
-        onPointerMove={wake}
-        onPointerDown={wake}
-        onKeyDown={wake}
-        onPointerLeave={() => {
+        onPointerMove={(e) => e.pointerType === 'mouse' && wake(e)}
+        onPointerDown={(e) => wake(e)}
+        onKeyDown={() => wake()}
+        onPointerLeave={(e) => {
+          // a finger lifting off also counts as "leaving"; only a mouse moving away hides them early
+          if (e.pointerType !== 'mouse') return
           clearTimeout(idleTimer.current)
           setAwake(false)
         }}
