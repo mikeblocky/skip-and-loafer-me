@@ -71,18 +71,41 @@ const BREAK_EVERY = 50
 const BREAK_LEN = 7
 /**
  * Twists, for the very long runs. From TWIST_AT points, every so often the camera does
- * something nasty for a few seconds (announced first). From TWIST_STACK_AT, two can stack.
+ * something nasty for a few seconds (announced first). How long they last, how often they
+ * come and how many stack all grow smoothly with the score (see twistTiming / stackOdds).
  * They only change how the road looks, never the controls, and never during a break.
  */
 const TWIST_AT = 5000
-const TWIST_STACK_AT = 8000
-/** from here twists last longer and come more often */
-const TWIST_LONG_AT = 9000
-/** from here: near-constant twists, up to three at once, new events, a much denser road */
+/** the new events unlock here, and the "mayhem" curve starts climbing (full by 25,000) */
 const MAYHEM_AT = 10000
 /** [seconds a twist lasts, seconds between twists], by stage */
-const twistTiming = (score: number) =>
-  score >= MAYHEM_AT ? { len: 13, gap: 3.5 } : score >= TWIST_LONG_AT ? { len: 11, gap: 6 } : { len: 8, gap: 11 }
+/**
+ * How far into the 10k+ "mayhem" stretch we are: 0 at 10,000, rising to 1 at 20,000. Everything
+ * that gets nastier past 10k scales with this, so 10k starts the climb instead of flipping a switch.
+ */
+const lerp = (a: number, b: number, t: number) => a + (b - a) * t
+/**
+ * Smooth late-game curves. Every "harder" number is a gentle S-curve of the score (slow start,
+ * steady climb, easing into its maximum), so nothing ever jumps at a particular score.
+ * curve(score, from, to) is 0 up to `from`, 1 from `to`, and smooth in between.
+ */
+const curve = (score: number, from: number, to: number) => {
+  const t = Math.max(0, Math.min(1, (score - from) / (to - from)))
+  return t * t * (3 - 2 * t)
+}
+/** the 10k+ stretch: 0 at 10,000, all the way up by 25,000 */
+const mayhem = (score: number) => curve(score, MAYHEM_AT, 25000)
+/** twists stretch out and come closer together from 5,000 to 25,000 */
+const twistTiming = (score: number) => {
+  const t = curve(score, TWIST_AT, 25000)
+  return { len: lerp(8, 13, t), gap: lerp(11, 4, t) }
+}
+/** chance a twist brings a second one along (from ~7k), and a third (from ~15k) */
+const stackOdds = (score: number) => ({ two: 0.85 * curve(score, 7000, 20000), three: 0.4 * curve(score, 15000, 25000) })
+/** late-game breathing room: hearts / power-ups wait this long after one appears (from ~7k) */
+const cooldowns = (score: number) => ({ heart: lerp(0, HEART_COOLDOWN, curve(score, 7000, 25000)), power: lerp(0, POWER_COOLDOWN, curve(score, 7000, 25000)) })
+/** extra clutter slipped in between patterns, building up all the way from the win */
+const extraClutter = (score: number) => 0.8 * curve(score, 900, 25000)
 const TWISTS = {
   tilt: { label: 'the road tilts!', from: TWIST_AT },
   mirror: { label: 'mirror world!', from: TWIST_AT },
@@ -100,7 +123,7 @@ type Twist = keyof typeof TWISTS
 /** moon gravity: hops float this much longer (and higher) */
 const MOON = 0.55
 /** rush hour: road speed multiplier, and how far past the usual top speed it may go */
-const RUSH = 1.3
+const rushOf = (score: number) => lerp(1.15, 1.3, mayhem(score))
 /** past 10k, a pause after each heart / power-up before the next one can appear (seconds) */
 const HEART_COOLDOWN = 8
 const POWER_COOLDOWN = 6
@@ -452,21 +475,25 @@ export function SkipGame() {
           const fresh = shuffle(open.filter((k) => TWISTS[k].from === MAYHEM_AT))
           const older = shuffle(open.filter((k) => TWISTS[k].from !== MAYHEM_AT))
           // from 10k the new events usually lead, so you actually meet them
-          const names = s.score >= MAYHEM_AT && Math.random() < 0.65 ? [...fresh, ...older] : shuffle(open)
-          const count =
-            s.score >= MAYHEM_AT ? (Math.random() < 0.4 ? 3 : 2) : s.score >= TWIST_STACK_AT && Math.random() < 0.55 ? 2 : 1
+          const M = mayhem(s.score)
+          // the new 10k events lead more and more often as the stretch goes on
+          const names = Math.random() < 0.15 + 0.5 * M ? [...fresh, ...older] : shuffle(open)
+          const odds = stackOdds(s.score)
+          const count = Math.random() < odds.three ? 3 : Math.random() < odds.two ? 2 : 1
           // lights out and flickering lights would fight over the same overlay; never stack them
           const picked: Twist[] = []
           for (const n of names) {
             if (picked.length >= count) break
             if (n === 'dark' && picked.includes('flicker')) continue
             if (n === 'flicker' && picked.includes('dark')) continue
+            // early in the stretch, only one of the new 10k events at a time
+            if (M < 0.5 && TWISTS[n].from === MAYHEM_AT && picked.some((x) => TWISTS[x].from === MAYHEM_AT)) continue
             picked.push(n)
           }
           s.twistT = len
           s.twistWait = gap * (0.8 + Math.random() * 0.5)
           s.active = picked
-          if (picked.includes('rush')) s.speed = Math.min(MAX_SPEED * RUSH, s.speed * RUSH)
+          if (picked.includes('rush')) s.speed = Math.min(MAX_SPEED * rushOf(s.score), s.speed * rushOf(s.score))
           setTiltDir(Math.random() < 0.5 ? -1 : 1)
           setTwists(picked)
           say(picked.map((t) => TWISTS[t].label).join(' + '), 2000)
@@ -477,7 +504,7 @@ export function SkipGame() {
       // ...up to a ceiling a person can still react at (clutter crosses the screen in ~½s); past that,
       // the harder road patterns keep raising the difficulty instead
       // past the cap (rush hour just ended), ease back down instead of snapping
-      const cap = MAX_SPEED * (s.active.includes('rush') ? RUSH : 1)
+      const cap = MAX_SPEED * (s.active.includes('rush') ? rushOf(s.score) : 1)
       if (s.speed > cap) s.speed = Math.max(cap, s.speed - (s.speed - cap) * Math.min(1, dt * 1.5) - 40 * dt)
       s.dist += s.speed * dt
       // the band speeds up with the road: ~112 bpm at the start, up to ~172 when it's frantic
@@ -599,7 +626,7 @@ export function SkipGame() {
       if (s.active.includes('storm')) {
         s.stormT -= dt
         if (s.stormT <= 0) {
-          s.stormT = 0.45 + Math.random() * 0.35
+          s.stormT = lerp(0.9, 0.45, mayhem(s.score)) + Math.random() * 0.35
           spawn('plane', w + 40 + Math.random() * 60, 92 + Math.random() * 110, Math.random() < 0.3 ? 'zigzag' : 'normal')
         }
       }
@@ -616,7 +643,7 @@ export function SkipGame() {
           } else spawn('star', w + 20)
         } else if (s.score > 60 && r < 0.14 + lvl * 0.12) spawn('plane', w + 40)
         else if (s.score > 15 && r < Math.min(0.34, 0.26 + lvl * 0.06 + T * 0.012) && s.powerCd <= 0) {
-          if (s.score >= MAYHEM_AT) s.powerCd = POWER_COOLDOWN
+          s.powerCd = cooldowns(s.score).power
           // a power-up, never one that is already running
           const choices = (Object.keys(POWERS) as Power[]).filter((k) => k === 'sparkle' || s.pw[k as Timed] <= 0)
           // the wilder the road, the more often the golden heart is the one on offer
@@ -625,7 +652,7 @@ export function SkipGame() {
         } else if (r < 0.42 + lvl * 0.08) spawn('star', w + 20)
         // hearts turn up more often with every level
         else if (s.lives < LIVES && r < 0.45 + lvl * 0.05 + T * 0.02 + Math.max(0, T - 5) * 0.015 && s.heartCd <= 0) {
-          if (s.score >= MAYHEM_AT) s.heartCd = HEART_COOLDOWN
+          s.heartCd = cooldowns(s.score).heart
           spawn('heart', w + 20)
         }
         else {
@@ -674,16 +701,15 @@ export function SkipGame() {
             pattern(road[Math.floor(Math.random() * road.length)], x0)
             pattern(air[Math.floor(Math.random() * air.length)], x0 + 140 + Math.random() * 80)
             // past 10k, often a third pattern on top
-            if (s.score >= MAYHEM_AT && Math.random() < 0.55) pattern(road[Math.floor(Math.random() * road.length)], x0 + 300 + Math.random() * 80)
+            if (Math.random() < 0.55 * mayhem(s.score)) pattern(road[Math.floor(Math.random() * road.length)], x0 + 300 + Math.random() * 80)
           } else pattern(combo, x0)
           // from the win on, the odd extra bit of clutter slips in between patterns (much more past 10k)
-          const extra = s.score >= MAYHEM_AT ? 0.8 : Math.min(0.45, (T - 5) * 0.07)
-          if (T >= 6 && Math.random() < extra) pattern(Math.random() < 0.5 ? 'single' : 'bounce', x0 + 260 + Math.random() * 120)
-          if (s.score >= MAYHEM_AT && Math.random() < 0.5) pattern(Math.random() < 0.5 ? 'roll' : 'drop', x0 + 420 + Math.random() * 120)
+          if (T >= 6 && Math.random() < extraClutter(s.score)) pattern(Math.random() < 0.5 ? 'single' : 'bounce', x0 + 260 + Math.random() * 120)
+          if (Math.random() < 0.5 * mayhem(s.score)) pattern(Math.random() < 0.5 ? 'roll' : 'drop', x0 + 420 + Math.random() * 120)
           // let the pattern clear before the next one
           if (combo === 'triple' || combo === 'under' || combo === 'chaos' || combo === 'swarm' || combo === 'rain') s.next += 0.3
         }
-        s.next += (0.65 + Math.random() * 0.8) * (340 / s.speed) + 0.36 - Math.min(s.score >= MAYHEM_AT ? 0.22 : 0.12, T * 0.015)
+        s.next += (0.65 + Math.random() * 0.8) * (340 / s.speed) + 0.36 - Math.min(0.12 + 0.1 * mayhem(s.score), T * 0.015)
       }
 
       // move, draw and check every thing
