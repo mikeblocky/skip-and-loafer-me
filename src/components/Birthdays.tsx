@@ -168,7 +168,7 @@ export function Birthdays() {
     gsap.to(el, {
       rotation: nearestTurn(cur, -list[i].a),
       duration: 0.9,
-      ease: 'back.out(1.5)',
+      ease: 'back.out(1.25)',
       overwrite: true,
       onUpdate: sync,
       onComplete: () => {

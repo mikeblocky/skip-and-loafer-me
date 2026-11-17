@@ -20,8 +20,16 @@
   --hair: #e8e4dc;
   --paper: #fffdf7;
   --line: #E3EEFF;
-  --spring: cubic-bezier(0.3, 1.8, 0.5, 1);
+  /* motion: one gentle overshoot, one smooth settle, one quick press */
+  --spring: cubic-bezier(0.34, 1.35, 0.64, 1);
   --soft: cubic-bezier(0.22, 1, 0.36, 1);
+  --press: cubic-bezier(0.2, 0, 0, 1);
+  --t-fast: 0.16s;
+  --t-hover: 0.32s;
+  /* depth: ink-tinted, layered, never grey */
+  --shadow-1: 0 1px 1px rgb(29 27 44 / 0.04), 0 2px 6px -1px rgb(29 27 44 / 0.08);
+  --shadow-2: 0 2px 3px rgb(29 27 44 / 0.05), 0 12px 28px -8px rgb(29 27 44 / 0.22);
+  --shadow-3: 0 4px 8px rgb(29 27 44 / 0.06), 0 24px 48px -12px rgb(29 27 44 / 0.28);
   --jp: 'M PLUS Rounded 1c', 'Hiragino Maru Gothic ProN', sans-serif;
   color-scheme: light;
 }
@@ -61,6 +69,42 @@ button {
 ::selection {
   background: var(--yellow);
   color: var(--ink);
+}
+
+/* one focus ring for everything you can tab to; mouse clicks don't show it */
+:where(a, button, [tabindex]):focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 3px;
+}
+:where(a, button, [tabindex]):focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* headings never leave a lonely last word */
+h1,
+h2,
+.cd-title,
+.vol-title,
+.bd-title,
+.anime-title,
+.ch-title {
+  text-wrap: balance;
+}
+.st-line {
+  text-wrap: pretty;
+}
+
+/* things you can pick up show it */
+.char,
+.floaty,
+.photo {
+  cursor: grab;
+}
+.char:active,
+.floaty:active,
+.photo:active,
+.viewer-stage:active {
+  cursor: grabbing;
 }
 
 /* notebook paper */
@@ -178,7 +222,6 @@ button {
 
 /* ───────── chrome ───────── */
 .wordmark {
-  gap: 0 6px;
   position: fixed;
   top: 22px;
   left: 28px;
@@ -219,6 +262,12 @@ button {
   padding-bottom: 18px;
   background: var(--c);
   border-radius: 0 0 22px 22px;
+  box-shadow: var(--shadow-1);
+  transition: box-shadow var(--t-hover) var(--soft);
+}
+.mark:hover .mark-ribbon,
+.mark.is-active .mark-ribbon {
+  box-shadow: var(--shadow-2);
 }
 .mark-label {
   font-size: 15px;
@@ -513,11 +562,20 @@ button {
   background: var(--c);
   overflow: hidden;
   transform: rotate(var(--t));
-  transition: transform 0.6s var(--spring);
+  box-shadow: var(--shadow-1);
+  transition:
+    transform 0.45s var(--spring),
+    box-shadow 0.45s var(--soft);
 }
 .vcard:hover .vcard-face,
 .vcard:focus-visible .vcard-face {
-  transform: translateY(-20px) rotate(calc(var(--t) * -0.6)) scale(1.04);
+  transform: translateY(-14px) rotate(calc(var(--t) * 0.3));
+  box-shadow: var(--shadow-3);
+}
+.vcard:active .vcard-face {
+  transform: translateY(-8px) rotate(calc(var(--t) * 0.3)) scale(0.985);
+  box-shadow: var(--shadow-2);
+  transition-duration: var(--t-fast);
 }
 .vcard:focus-visible .vcard-face {
   outline: 3px solid var(--ink);
@@ -536,10 +594,10 @@ button {
   top: -8%;
   opacity: 0.34;
   transform: rotate(18deg);
-  transition: transform 0.7s var(--spring);
+  transition: transform 0.6s var(--soft);
 }
 .vcard:hover .vcard-mark {
-  transform: rotate(-20deg) scale(1.15);
+  transform: rotate(8deg) translate(-4%, 4%);
 }
 .vcard-vol {
   position: absolute;
@@ -716,13 +774,18 @@ button {
   font-variation-settings: 'wght' 900, 'ROND' 100;
   font-feature-settings: 'tnum';
   cursor: pointer;
-  transition: scale 0.5s var(--spring);
+  box-shadow: var(--shadow-1);
+  transition:
+    scale 0.35s var(--spring),
+    box-shadow 0.35s var(--soft);
 }
 .bd-pin:hover .bd-dot {
-  scale: 1.18;
+  scale: 1.12;
+  box-shadow: var(--shadow-2);
 }
 .bd-pin.is-sel .bd-dot {
-  scale: 1.45;
+  scale: 1.35;
+  box-shadow: var(--shadow-2);
 }
 .bd-name {
   position: absolute;
@@ -745,12 +808,12 @@ button {
   left: 50%;
   top: -6px;
   translate: -50% -100%;
-  animation: pointer 1.1s ease-in-out infinite alternate;
+  animation: pointer 1.8s ease-in-out infinite alternate;
   pointer-events: none;
 }
 @keyframes pointer {
   to {
-    transform: translateY(-7px) scale(1.08);
+    transform: translateY(-4px);
   }
 }
 
@@ -764,12 +827,12 @@ button {
   align-items: center;
   text-align: center;
   pointer-events: none;
-  animation: info-in 0.5s var(--spring) both;
+  animation: info-in 0.45s var(--soft) both;
 }
 @keyframes info-in {
   from {
     opacity: 0;
-    transform: scale(0.7) translateY(16px);
+    transform: scale(0.94) translateY(10px);
   }
 }
 .bd-face {
@@ -1047,22 +1110,40 @@ button {
   height: 52px;
   border-radius: 50%;
   background: #fff;
-  border: 1.5px solid var(--hair);
+  border: 1px solid var(--hair);
+  box-shadow: var(--shadow-1);
   transition:
-    transform 0.45s var(--spring),
-    border-color 0.2s,
-    background 0.2s;
+    transform var(--t-hover) var(--spring),
+    box-shadow var(--t-hover) var(--soft),
+    border-color var(--t-hover);
 }
 .round-btn svg {
   width: 20px;
   height: 20px;
+  transition:
+    transform var(--t-hover) var(--soft),
+    translate var(--t-hover) var(--soft);
 }
 .round-btn:hover {
-  transform: scale(1.1);
-  border-color: var(--ink);
+  transform: translateY(-2px);
+  border-color: color-mix(in oklab, var(--ink), #fff 70%);
+  box-shadow: var(--shadow-2);
 }
 .round-btn:active {
-  transform: scale(0.94);
+  transform: translateY(0) scale(0.95);
+  box-shadow: var(--shadow-1);
+  transition-duration: var(--t-fast);
+  transition-timing-function: var(--press);
+}
+/* the arrow leans the way it will take you */
+.v-bar .round-btn:first-child:hover svg {
+  translate: -2px 0;
+}
+.v-bar .round-btn:last-child:hover svg {
+  translate: 2px 0;
+}
+.v-close:hover svg {
+  transform: rotate(90deg);
 }
 .v-close {
   top: 22px;
@@ -1159,9 +1240,17 @@ button {
   }
 }
 
+/* reduced motion: nothing loops, nothing floats; state changes still fade so you can follow them */
 @media (prefers-reduced-motion: reduce) {
-  .loader i {
-    animation: none;
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+  }
+  :where(.round-btn, .buy, .ch-card, .ch-link, .vcard-face, .tv, .gate-go, .pl-big, .bd-dot) {
+    transition-property: opacity, background, border-color, box-shadow, color !important;
   }
 }
 
@@ -1183,39 +1272,39 @@ button {
   height: 112px;
   border-radius: 50%;
   background: var(--pink);
-  animation: gate-bob 1.2s var(--spring) infinite alternate;
-  transition: transform 0.4s var(--spring);
+  box-shadow: var(--shadow-2);
+  transition:
+    transform var(--t-hover) var(--spring),
+    box-shadow var(--t-hover) var(--soft);
 }
-.gate-go::before,
-.gate-go::after {
+/* one slow ripple, like a breath, instead of constant bouncing */
+.gate-go::before {
   content: '';
   position: absolute;
   width: 112px;
   height: 112px;
   border-radius: 50%;
-  border: 3px solid var(--pink);
-  animation: gate-ring 1.8s ease-out infinite;
+  border: 2px solid var(--pink);
+  animation: gate-ring 2.8s var(--soft) infinite;
   pointer-events: none;
 }
-.gate-go::after {
-  border-color: var(--yellow);
-  animation-delay: 0.6s;
-}
 .gate-go:hover {
-  transform: scale(1.1) rotate(-6deg);
+  transform: scale(1.05);
+  box-shadow: var(--shadow-3);
 }
-@keyframes gate-bob {
-  to {
-    translate: 0 -10px;
-  }
+.gate-go:active {
+  transform: scale(0.97);
+  box-shadow: var(--shadow-1);
+  transition-duration: var(--t-fast);
 }
 @keyframes gate-ring {
   from {
     transform: scale(1);
-    opacity: 0.9;
+    opacity: 0.6;
   }
+  70%,
   to {
-    transform: scale(2.1);
+    transform: scale(1.7);
     opacity: 0;
   }
 }
@@ -1242,12 +1331,20 @@ button {
   height: 50px;
   border-radius: 50%;
   background: #fff;
-  border: 1.5px solid var(--hair);
+  border: 1px solid var(--hair);
+  box-shadow: var(--shadow-1);
   transform: scale(0);
-  transition: border-color 0.2s;
+  transition:
+    border-color var(--t-hover),
+    box-shadow var(--t-hover) var(--soft),
+    background var(--t-hover);
 }
 .sound-toggle:hover {
-  border-color: var(--ink);
+  border-color: color-mix(in oklab, var(--ink), #fff 70%);
+  box-shadow: var(--shadow-2);
+}
+.sound-toggle:active {
+  box-shadow: none;
 }
 .sound-toggle[aria-pressed='false'] {
   background: #f1eee7;
@@ -1265,15 +1362,18 @@ button {
   padding: 9px 16px 9px 12px;
   border-radius: 999px;
   background: #fff;
-  border: 1.5px solid var(--hair);
+  border: 1px solid var(--hair);
+  box-shadow: var(--shadow-1);
   color: var(--ink);
   transition:
     opacity 0.35s,
     visibility 0.35s,
-    border-color 0.2s;
+    border-color var(--t-hover),
+    box-shadow var(--t-hover) var(--soft);
 }
 .timer:hover {
-  border-color: var(--pink);
+  border-color: color-mix(in oklab, var(--pink), #fff 40%);
+  box-shadow: var(--shadow-2);
 }
 .timer.is-hidden {
   opacity: 0;
@@ -1370,14 +1470,25 @@ button {
   background: color-mix(in oklab, var(--violet), #fff 84%);
   color: var(--violet);
 }
+/* "airing" reads like an on-air light: steady label, softly blinking dot */
 .tag-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   background: var(--red);
   color: #fff;
-  animation: live 1.4s ease-in-out infinite alternate;
+}
+.tag-live::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #fff;
+  animation: live 1.6s ease-in-out infinite;
 }
 @keyframes live {
-  to {
-    background: var(--orange);
+  50% {
+    opacity: 0.25;
   }
 }
 .buy {
@@ -1389,23 +1500,36 @@ button {
   background: var(--c);
   color: #fff;
   text-decoration: none;
+  box-shadow: var(--shadow-1);
   transition:
-    transform 0.45s var(--spring),
-    background 0.2s;
+    transform var(--t-hover) var(--spring),
+    box-shadow var(--t-hover) var(--soft),
+    background var(--t-hover);
 }
 .buy-alt {
   background: color-mix(in oklab, var(--c), #fff 84%);
   color: var(--c);
+  box-shadow: none;
 }
 .buy:hover {
-  transform: translateY(-3px) rotate(-1.5deg) scale(1.04);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-2);
+}
+.buy-alt:hover {
+  background: color-mix(in oklab, var(--c), #fff 76%);
+  box-shadow: none;
+}
+.buy:active {
+  transform: translateY(0) scale(0.98);
+  box-shadow: var(--shadow-1);
+  transition-duration: var(--t-fast);
 }
 .buy svg {
   flex: none;
-  transition: transform 0.5s var(--spring);
+  transition: translate var(--t-hover) var(--soft);
 }
 .buy:hover svg {
-  transform: rotate(-12deg) scale(1.15);
+  translate: 0 -1px;
 }
 .buy-text {
   display: flex;
@@ -1447,10 +1571,14 @@ button {
   background: var(--c);
   color: #fff;
   overflow: visible;
-  transition: transform 0.55s var(--spring);
+  box-shadow: var(--shadow-1);
+  transition:
+    transform 0.4s var(--soft),
+    box-shadow 0.4s var(--soft);
 }
 .ch-card:hover {
-  transform: translateY(-6px) rotate(-1.5deg) scale(1.03);
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-2);
 }
 .ch-top {
   display: flex;
@@ -1492,10 +1620,18 @@ button {
   font-size: 13px;
   font-variation-settings: 'wght' 850, 'ROND' 100;
   text-decoration: none;
-  transition: transform 0.4s var(--spring);
+  transition:
+    transform var(--t-hover) var(--spring),
+    background var(--t-hover),
+    color var(--t-hover);
 }
 .ch-link:hover {
-  transform: scale(1.08) rotate(-3deg);
+  background: var(--ink);
+  color: #fff;
+}
+.ch-link:active {
+  transform: scale(0.95);
+  transition-duration: var(--t-fast);
 }
 
 /* the newest chapter: a double-width hero card with a spinning starburst */
@@ -1507,7 +1643,6 @@ button {
     radial-gradient(circle at 85% 20%, rgb(255 255 255 / 0.22) 0 18%, transparent 19%),
     radial-gradient(circle at 70% 95%, rgb(255 255 255 / 0.14) 0 22%, transparent 23%),
     var(--c);
-  animation: latest 2.6s ease-in-out infinite;
 }
 .ch-card.is-latest .ch-num {
   font-size: 76px;
@@ -1519,11 +1654,6 @@ button {
 .ch-card.is-latest .ch-kind {
   background: var(--yellow);
   color: var(--ink);
-}
-@keyframes latest {
-  50% {
-    transform: scale(1.02) rotate(-0.6deg);
-  }
 }
 .ch-sticker {
   position: absolute;
@@ -1538,7 +1668,7 @@ button {
 .ch-burst {
   position: absolute;
   inset: 0;
-  animation: burst 7s linear infinite;
+  animation: burst 30s linear infinite;
 }
 @keyframes burst {
   to {
@@ -1554,7 +1684,7 @@ button {
 }
 .ch-spark {
   position: absolute;
-  animation: twinkle 1.6s ease-in-out infinite alternate;
+  animation: twinkle 2.6s ease-in-out infinite alternate;
 }
 .ch-spark-a {
   right: 90px;
@@ -1567,11 +1697,11 @@ button {
 }
 @keyframes twinkle {
   from {
-    transform: scale(0.5) rotate(0deg);
-    opacity: 0.4;
+    transform: scale(0.8) rotate(0deg);
+    opacity: 0.5;
   }
   to {
-    transform: scale(1.2) rotate(45deg);
+    transform: scale(1) rotate(20deg);
     opacity: 1;
   }
 }
@@ -1641,13 +1771,8 @@ button {
 .vcard-new {
   background: var(--yellow);
   color: var(--ink);
-  transform: rotate(8deg);
-  animation: new-pop 1.2s var(--spring) infinite alternate;
-}
-@keyframes new-pop {
-  to {
-    transform: rotate(-6deg) scale(1.12);
-  }
+  transform: rotate(6deg);
+  box-shadow: var(--shadow-1);
 }
 .vcard-flag {
   background: #fff;
@@ -2084,12 +2209,6 @@ body {
 .s-chip-soon {
   background: var(--c);
   color: #fff;
-  animation: soon 1.6s ease-in-out infinite alternate;
-}
-@keyframes soon {
-  to {
-    transform: scale(1.06) rotate(-2deg);
-  }
 }
 .season-body {
   position: relative;
@@ -2304,16 +2423,18 @@ body {
   padding-left: 6px;
   border-radius: 50%;
   background: var(--c);
-  transition: transform 0.45s var(--spring);
-  animation: pl-pulse 1.8s ease-in-out infinite;
+  box-shadow: var(--shadow-2);
+  transition:
+    transform var(--t-hover) var(--spring),
+    box-shadow var(--t-hover) var(--soft);
 }
 .pl-big:hover {
-  transform: scale(1.12) rotate(-6deg);
+  transform: scale(1.06);
+  box-shadow: var(--shadow-3);
 }
-@keyframes pl-pulse {
-  50% {
-    scale: 1.06;
-  }
+.pl-big:active {
+  transform: scale(0.96);
+  transition-duration: var(--t-fast);
 }
 .pl-bar {
   position: absolute;
@@ -2349,12 +2470,14 @@ body {
   border-radius: 50%;
   flex: none;
   transition:
-    background 0.2s,
-    transform 0.4s var(--spring);
+    background var(--t-hover),
+    transform var(--t-fast) var(--press);
 }
 .pl-btn:hover {
-  background: var(--c);
-  transform: scale(1.1);
+  background: rgb(255 255 255 / 0.16);
+}
+.pl-btn:active {
+  transform: scale(0.9);
 }
 .pl-time {
   flex: none;
@@ -2403,11 +2526,20 @@ body {
   margin: -8px 0 0 -8px;
   border-radius: 50%;
   background: #fff;
-  transition: scale 0.3s var(--spring);
+  scale: 0.7;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.3);
+  transition: scale 0.25s var(--soft);
 }
+/* the knob only grows when you reach for it */
 .pl-track:hover .pl-knob,
-.pl-track:focus-visible .pl-knob {
-  scale: 1.3;
+.pl-track:focus-visible .pl-knob,
+.pl-track:active .pl-knob {
+  scale: 1.1;
+}
+.pl-track:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+  border-radius: 999px;
 }
 .pl-cap {
   display: flex;
@@ -2524,16 +2656,24 @@ body {
   width: clamp(150px, 26vw, 330px);
   padding-top: clamp(34px, 4.5vw, 58px);
   transform: rotate(var(--t));
-  transition: transform 0.55s var(--spring);
+  transition: transform 0.45s var(--spring);
   cursor: pointer;
 }
 .tv:hover,
 .tv:focus-visible {
-  transform: rotate(0deg) translateY(-8px) scale(1.03);
+  transform: rotate(0deg) translateY(-6px);
   outline: none;
 }
+.tv:focus-visible .tv-body {
+  outline: 2px solid var(--ink);
+  outline-offset: 4px;
+}
+.tv:active {
+  transform: rotate(0deg) translateY(-2px) scale(0.99);
+  transition-duration: var(--t-fast);
+}
 .tv.is-on {
-  transform: rotate(0deg) scale(1.04);
+  transform: rotate(0deg);
 }
 /* rabbit-ear antennas */
 .tv-ant {
@@ -2571,7 +2711,7 @@ body {
   transform: rotate(40deg);
 }
 .tv.is-on .tv-ant {
-  animation: ant 1.4s ease-in-out infinite alternate;
+  animation: ant 2.4s ease-in-out infinite alternate;
 }
 .tv.is-on .tv-ant-r {
   animation-delay: -0.7s;
@@ -2678,10 +2818,11 @@ body {
   padding-left: 4px;
   border-radius: 50%;
   background: var(--c);
-  transition: transform 0.45s var(--spring);
+  box-shadow: var(--shadow-2);
+  transition: transform var(--t-hover) var(--spring);
 }
 .tv:hover .tv-play {
-  transform: scale(1.15);
+  transform: scale(1.08);
 }
 .tv-side {
   display: flex;
@@ -2771,7 +2912,7 @@ body {
   width: 100%;
 }
 .season-head {
-  animation: info-in 0.6s var(--spring) both;
+  animation: info-in 0.5s var(--soft) both;
 }
 
 @media (max-width: 760px) {
@@ -2788,5 +2929,24 @@ body {
   }
   .tv-label small {
     font-size: 12px;
+  }
+}
+
+/* touch screens have no hover: don't leave things lifted after a tap */
+@media (hover: none) {
+  .round-btn:hover,
+  .buy:hover,
+  .ch-card:hover,
+  .gate-go:hover,
+  .pl-big:hover {
+    transform: none;
+    box-shadow: var(--shadow-1);
+  }
+  .vcard:hover .vcard-face {
+    transform: rotate(var(--t));
+    box-shadow: var(--shadow-1);
+  }
+  .bd-pin:hover .bd-dot {
+    scale: 1;
   }
 }

@@ -234,7 +234,7 @@ export function Anime() {
         setPick(i)
         const top = row.current?.getBoundingClientRect().bottom ?? 0
         if (top < 0) window.scrollTo({ top: window.scrollY + top - 140, behavior: 'smooth' })
-        gsap.fromTo(detail.current, { opacity: 0, y: 40 }, { opacity: 1, y: 0, duration: 0.6, ease: 'back.out(1.6)' })
+        gsap.fromTo(detail.current, { opacity: 0, y: 40 }, { opacity: 1, y: 0, duration: 0.6, ease: 'back.out(1.25)' })
       },
     })
   }

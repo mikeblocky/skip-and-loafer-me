@@ -39,14 +39,14 @@ function Mark({
       gsap.set(ref.current, { y, rotation, transformOrigin: '50% 0%' })
       return
     }
-    gsap.to(ref.current, { y, rotation, duration: active ? 0.9 : 0.7, ease: active ? 'elastic.out(1, 0.45)' : 'elastic.out(1, 0.55)', overwrite: 'auto' })
+    gsap.to(ref.current, { y, rotation, duration: active ? 0.9 : 0.7, ease: active ? 'elastic.out(1, 0.75)' : 'elastic.out(1, 0.75)', overwrite: 'auto' })
   }, [active, hover])
 
   const press = () => {
     const el = ref.current
     if (item.id === 'replay') {
-      gsap.fromTo(el, { y: 6 }, { y: hover ? lift() : rest(), duration: 0.9, ease: 'elastic.out(1, 0.4)' })
-      gsap.fromTo(el!.querySelector('svg'), { rotation: 0 }, { rotation: -360, duration: 0.8, ease: 'back.out(1.6)' })
+      gsap.fromTo(el, { y: 6 }, { y: hover ? lift() : rest(), duration: 0.9, ease: 'elastic.out(1, 0.75)' })
+      gsap.fromTo(el!.querySelector('svg'), { rotation: 0 }, { rotation: -360, duration: 0.8, ease: 'back.out(1.25)' })
     } else if (!active) {
       gsap.fromTo(el, { y: lift() }, { y: 14, duration: 0.18, ease: 'power2.out' })
     }

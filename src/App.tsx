@@ -82,9 +82,9 @@ export default function App() {
     tl.call(() => sfx.swell(2.75), [], 0.05)
     tl.add(s.intro(), 0)
     tl.call(() => sfx.jingle(), [], 2.8)
-    tl.to(ui, { autoAlpha: 1, y: 0, scale: 1, duration: 0.85, ease: 'back.out(2)', stagger: 0.08 }, 2.75)
-    tl.to(chrome, { y: 0, duration: 1.1, ease: 'elastic.out(1, 0.55)', stagger: 0.08 }, 3.0)
-    tl.to('.sound-toggle', { scale: 1, rotation: 0, duration: 0.8, ease: 'back.out(2.5)' }, 3.2)
+    tl.to(ui, { autoAlpha: 1, y: 0, scale: 1, duration: 0.85, ease: 'back.out(1.4)', stagger: 0.08 }, 2.75)
+    tl.to(chrome, { y: 0, duration: 1.1, ease: 'elastic.out(1, 0.75)', stagger: 0.08 }, 3.0)
+    tl.to('.sound-toggle', { scale: 1, rotation: 0, duration: 0.8, ease: 'back.out(1.4)' }, 3.2)
     intro.current = tl
 
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) tl.progress(1)
@@ -204,7 +204,7 @@ export default function App() {
       gsap.fromTo(
         els,
         { autoAlpha: 0, y: 70, scale: 0.85 },
-        { autoAlpha: 1, y: 0, scale: 1, duration: 0.8, ease: 'back.out(2)', stagger: 0.07, delay: 0.25 },
+        { autoAlpha: 1, y: 0, scale: 1, duration: 0.8, ease: 'back.out(1.4)', stagger: 0.07, delay: 0.25 },
       )
     })
   }

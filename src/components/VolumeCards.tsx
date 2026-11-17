@@ -33,7 +33,7 @@ export function VolumeCards({ hidden, onOpen }: { hidden: number | null; onOpen:
       gsap.to(lean, { v: gsap.utils.clamp(-16, 16, -vx / 80), duration: 0.35, ease: 'power3.out', overwrite: true, onUpdate: setLean })
     }
     const settle = () =>
-      gsap.to(lean, { v: 0, duration: 1.6, ease: 'elastic.out(1.1, 0.22)', overwrite: true, onUpdate: setLean })
+      gsap.to(lean, { v: 0, duration: 1.6, ease: 'elastic.out(1, 0.75)', overwrite: true, onUpdate: setLean })
 
     const [d] = Draggable.create(t, {
       type: 'x',
@@ -76,7 +76,7 @@ export function VolumeCards({ hidden, onOpen }: { hidden: number | null; onOpen:
         rotation: 0,
         opacity: 1,
         duration: 1,
-        ease: 'back.out(1.6)',
+        ease: 'back.out(1.25)',
         stagger: 0.05,
         delay: 0.15,
         clearProps: 'transform,opacity',

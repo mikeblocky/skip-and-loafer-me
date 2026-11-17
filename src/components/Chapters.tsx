@@ -90,7 +90,7 @@ export function ChapterPanel({ vol, color }: { vol: Volume; color: string }) {
     gsap.fromTo(
       items,
       { y: 40, opacity: 0, rotation: () => gsap.utils.random(-8, 8), scale: 0.92 },
-      { y: 0, opacity: 1, rotation: 0, scale: 1, duration: 0.7, ease: 'back.out(1.8)', stagger: 0.045, delay: 0.25, clearProps: 'transform' },
+      { y: 0, opacity: 1, rotation: 0, scale: 1, duration: 0.7, ease: 'back.out(1.25)', stagger: 0.045, delay: 0.25, clearProps: 'transform' },
     )
     const ids = Array.from({ length: Math.min(items.length, 8) }, (_, i) =>
       window.setTimeout(() => sfx.pop(1 + i * 0.06, 0.5), 300 + i * 70),

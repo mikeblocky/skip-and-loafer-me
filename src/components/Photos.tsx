@@ -79,7 +79,7 @@ export function Photos({ srcs, bodyRef }: { srcs: string[]; bodyRef: React.RefOb
         const { vx } = vt.sample(this.x, this.y)
         rot(clamp(-28, 28, vx / 50))
       }
-      const settle = () => gsap.to(el, { rotation: rand(-8, 8), duration: 1.2, ease: 'elastic.out(1, 0.35)' })
+      const settle = () => gsap.to(el, { rotation: rand(-8, 8), duration: 1.2, ease: 'elastic.out(1, 0.75)' })
       const [d] = Draggable.create(el, {
         type: 'x,y',
         bounds: body,
@@ -91,13 +91,13 @@ export function Photos({ srcs, bodyRef }: { srcs: string[]; bodyRef: React.RefOb
         onPress(this: Draggable) {
           vt.reset(this.x, this.y)
           sfx.grab(sfx.panOf(this.pointerX))
-          gsap.to(fl, { scale: 1.08, duration: 0.3, ease: 'back.out(3)' })
+          gsap.to(fl, { scale: 1.08, duration: 0.3, ease: 'back.out(1.4)' })
         },
         onDrag: lean,
         onThrowUpdate: lean,
         onRelease(this: Draggable) {
           sfx.boing(sfx.panOf(this.pointerX))
-          gsap.to(fl, { scale: 1, duration: 0.8, ease: 'elastic.out(1.1, 0.3)' })
+          gsap.to(fl, { scale: 1, duration: 0.8, ease: 'elastic.out(1, 0.75)' })
           if (!this.isThrowing) settle()
         },
         onThrowComplete: settle,
@@ -112,7 +112,7 @@ export function Photos({ srcs, bodyRef }: { srcs: string[]; bodyRef: React.RefOb
       opacity: 0,
       rotation: () => rand(-60, 60),
       duration: 0.9,
-      ease: 'back.out(1.7)',
+      ease: 'back.out(1.25)',
       stagger: 0.08,
       delay: 0.3,
     })

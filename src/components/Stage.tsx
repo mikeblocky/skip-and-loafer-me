@@ -305,7 +305,7 @@ export const Stage = forwardRef<StageHandle, { aspects: Record<string, number> }
         fly(el, p, { x: p.x + w / 2, y: p.y + h / 2 }, (px, py, sc) => gsap.set(el, { x: px - w / 2, y: py - h / 2, scale: sc }), t, 1.7)
         tl.call(() => (sfx.thud(sfx.panOf(p.x + w / 2)), sfx.pop(0.55, sfx.panOf(p.x + w / 2))), [], t + 1.5)
         tl.to(inner, { scaleY: 0.92, scaleX: 1.05, duration: 0.1, ease: 'power2.out' }, t + 1.55)
-        tl.to(inner, { scaleY: 1, scaleX: 1, duration: 0.7, ease: 'elastic.out(1.2, 0.35)' }, t + 1.65)
+        tl.to(inner, { scaleY: 1, scaleX: 1, duration: 0.7, ease: 'elastic.out(1, 0.75)' }, t + 1.65)
       })
       return tl
     },
@@ -383,7 +383,7 @@ export const Stage = forwardRef<StageHandle, { aspects: Record<string, number> }
       const vt = velocityTracker()
       const rot = gsap.quickTo(el, 'rotation', { duration: 0.45, ease: 'power3.out' })
       const settle = () =>
-        gsap.to(el, { rotation: charHomes.current[i]?.rotation ?? 0, duration: 1.4, ease: 'elastic.out(1, 0.28)', overwrite: 'auto' })
+        gsap.to(el, { rotation: charHomes.current[i]?.rotation ?? 0, duration: 1.4, ease: 'elastic.out(1, 0.75)', overwrite: 'auto' })
       const lean = function (this: Draggable) {
         const { vx } = vt.sample(this.x, this.y)
         rot(clamp(-32, 32, vx / 45))
@@ -400,7 +400,7 @@ export const Stage = forwardRef<StageHandle, { aspects: Record<string, number> }
           touched.current.add(this.target as HTMLElement)
           el.classList.add('held')
           sfx.grab(sfx.panOf(this.pointerX))
-          gsap.to(inner, { scale: 1.07, duration: 0.35, ease: 'back.out(3)', overwrite: 'auto' })
+          gsap.to(inner, { scale: 1.07, duration: 0.35, ease: 'back.out(1.4)', overwrite: 'auto' })
         },
         onDrag: lean,
         onThrowUpdate: lean,
@@ -408,7 +408,7 @@ export const Stage = forwardRef<StageHandle, { aspects: Record<string, number> }
           el.classList.remove('held')
           sfx.boing(sfx.panOf(this.pointerX))
           if (this.isThrowing) sfx.whoosh(0.35, true, 0.12, sfx.panOf(this.pointerX))
-          gsap.to(inner, { scale: 1, duration: 0.9, ease: 'elastic.out(1.1, 0.3)', overwrite: 'auto' })
+          gsap.to(inner, { scale: 1, duration: 0.9, ease: 'elastic.out(1, 0.75)', overwrite: 'auto' })
           if (!this.isThrowing) settle()
         },
         onThrowComplete: settle,
@@ -430,14 +430,14 @@ export const Stage = forwardRef<StageHandle, { aspects: Record<string, number> }
         onPress(this: Draggable) {
           vt.reset(this.x, this.y)
           touched.current.add(this.target as HTMLElement)
-          gsap.to(el, { scale: base() * 1.35, duration: 0.3, ease: 'back.out(4)', overwrite: 'auto' })
+          gsap.to(el, { scale: base() * 1.35, duration: 0.3, ease: 'back.out(1.4)', overwrite: 'auto' })
           sfx.pop(1.3, sfx.panOf(this.pointerX))
         },
         onDrag: spin,
         onThrowUpdate: spin,
         onRelease(this: Draggable) {
           sfx.pop(0.9, sfx.panOf(this.pointerX))
-          gsap.to(el, { scale: base(), duration: 0.8, ease: 'elastic.out(1.2, 0.3)', overwrite: 'auto' })
+          gsap.to(el, { scale: base(), duration: 0.8, ease: 'elastic.out(1, 0.75)', overwrite: 'auto' })
         },
       })
       drags.current.push(d)

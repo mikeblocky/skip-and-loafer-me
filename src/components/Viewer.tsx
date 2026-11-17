@@ -98,9 +98,9 @@ export function Viewer({
         { x: 0, y: -30, scale: 1.04, rotationY: BASE_Y + 30, rotationZ: 0, rotationX: 10, duration: 0.65, ease: 'power3.out' },
         0,
       )
-      tl.to(book.current, { y: 0, scale: 1, rotationY: BASE_Y, rotationX: 6, duration: 0.9, ease: 'elastic.out(1, 0.5)' })
+      tl.to(book.current, { y: 0, scale: 1, rotationY: BASE_Y, rotationX: 6, duration: 0.9, ease: 'elastic.out(1, 0.75)' })
     }
-    tl.fromTo(ui.current!.children, { y: 40, opacity: 0, scale: 0.8 }, { y: 0, opacity: 1, scale: 1, stagger: 0.06, duration: 0.6, ease: 'back.out(2.5)' }, 0.35)
+    tl.fromTo(ui.current!.children, { y: 40, opacity: 0, scale: 0.8 }, { y: 0, opacity: 1, scale: 1, stagger: 0.06, duration: 0.6, ease: 'back.out(1.4)' }, 0.35)
     rot.current = { y: BASE_Y, x: 6 }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -212,7 +212,7 @@ export function Viewer({
         0.15,
       )
     } else {
-      tl.to(book.current, { scale: 0, duration: 0.4, ease: 'back.in(2)' }, 0.15)
+      tl.to(book.current, { scale: 0, duration: 0.4, ease: 'back.in(1.3)' }, 0.15)
     }
   }
 
@@ -242,7 +242,7 @@ export function Viewer({
     tl.fromTo(
       book.current,
       { x: side * vw * 0.5, rotationY: BASE_Y + side * 140, scale: 0.7, opacity: 0 },
-      { x: 0, rotationY: BASE_Y, scale: 1, opacity: 1, duration: 0.85, ease: 'back.out(1.5)' },
+      { x: 0, rotationY: BASE_Y, scale: 1, opacity: 1, duration: 0.85, ease: 'back.out(1.25)' },
     )
   }
 
