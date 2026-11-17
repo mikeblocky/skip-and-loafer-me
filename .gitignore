@@ -7,3 +7,5 @@ dist
 .env
 .env.*
 !.env.example
+# demo recordings (large videos) stay local
+recordings/

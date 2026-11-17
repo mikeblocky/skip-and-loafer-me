@@ -115,6 +115,21 @@ export function Player({ src, poster, kind, title, titleJp, artist, artistJp, co
   /** characters of line i already sung: finished lines stay lit while they fade out */
   const sungIn = (i: number, n: number) => (i === cue ? sung : i <= lastCue.current && i < (cue < 0 ? lastCue.current + 1 : cue) ? n : 0)
 
+  /** golden from the moment the secret word starts being sung until its line ends */
+  const isGolden = (i: number) => {
+    if (!subs || !goldenWord || i !== cue || !subsOn) return false
+    const c = subs[i]
+    if (!c.jp.includes(goldenWord)) return false
+    const at = Array.from(c.jp.slice(0, c.jp.indexOf(goldenWord))).length
+    return sungIn(i, Array.from(c.jp).length) > at
+  }
+  const catchGolden = () => {
+    video.current?.pause()
+    // the surprise opens over the page, so leave fullscreen first
+    if (document.fullscreenElement) document.exitFullscreen().catch(() => {})
+    onGolden?.()
+  }
+
   const toggleSubs = () => {
     const next = !subsOn
     setSubsOn(next)
@@ -191,7 +206,7 @@ export function Player({ src, poster, kind, title, titleJp, artist, artistJp, co
           poster={poster}
           preload="metadata"
           playsInline
-          onClick={toggle}
+          // tapping the picture only brings the controls up; pausing is the pause button's job
           onPlay={() => setPlaying(true)}
           onPause={() => setPlaying(false)}
           onEnded={() => setPlaying(false)}
@@ -207,9 +222,7 @@ export function Player({ src, poster, kind, title, titleJp, artist, artistJp, co
             {subs.map((c, i) => {
               const chars = Array.from(c.jp)
               const k = sungIn(i, chars.length)
-              // golden from the moment the word starts until the line ends
-              const at = goldenWord ? Array.from(c.jp.slice(0, Math.max(0, c.jp.indexOf(goldenWord)))).length : -1
-              const golden = i === cue && goldenWord !== undefined && c.jp.includes(goldenWord) && k > at
+              const golden = isGolden(i)
               return (
                 <p
                   key={i}
@@ -219,10 +232,7 @@ export function Player({ src, poster, kind, title, titleJp, artist, artistJp, co
                     golden
                       ? (e) => {
                           e.stopPropagation()
-                          video.current?.pause()
-                          // the surprise opens over the page, so leave fullscreen first
-                          if (document.fullscreenElement) document.exitFullscreen().catch(() => {})
-                          onGolden?.()
+                          catchGolden()
                         }
                       : undefined
                   }
