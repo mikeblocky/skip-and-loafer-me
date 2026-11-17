@@ -1,10 +1,14 @@
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef } from 'react'
 import { gsap, Draggable, velocityTracker } from '../gsap'
-import { CHARACTERS, RAINBOW } from '../data'
+import { C, CHARACTERS, RAINBOW } from '../data'
 import { Icon, SCATTER_ICONS, type IconName } from '../icons'
 import { sfx } from '../sfx'
+import { openSecret } from '../secrets'
 
 export type Mode = 'countdown' | 'volumes' | 'birthdays' | 'anime'
+
+/** Which scattered sticker is the gacha capsule. Tapping it three times in a row opens the gacha. */
+const CAPSULE = 3
 
 export interface StageHandle {
   prepare(): void
@@ -88,14 +92,18 @@ export const Stage = forwardRef<StageHandle, { aspects: Record<string, number> }
   // where each thing belongs: its scattered spot, or wherever you last dropped it.
   // Pages only nudge things away from home temporarily; they go back once it's clear again.
   const home = useRef(new Map<HTMLElement, { x: number; y: number }>())
+  const rattleTl = useRef<gsap.core.Timeline | null>(null)
+  const knocks = useRef(0)
+  const lastKnock = useRef(0)
   const setHome = (el: HTMLElement) => home.current.set(el, { x: gsap.getProperty(el, 'x') as number, y: gsap.getProperty(el, 'y') as number })
 
   const icons = useMemo(() => {
     const small = window.innerWidth < 760
     const count = small ? 16 : 30
     return Array.from({ length: count }, (_, i) => ({
-      name: SCATTER_ICONS[i % SCATTER_ICONS.length] as IconName,
-      color: RAINBOW[(i * 5) % RAINBOW.length],
+      // one sticker is secretly a gacha capsule (see CAPSULE)
+      name: (i === CAPSULE ? 'capsule' : SCATTER_ICONS[i % SCATTER_ICONS.length]) as IconName,
+      color: i === CAPSULE ? C.pink : RAINBOW[(i * 5) % RAINBOW.length],
       size: small ? 40 : 56,
       front: Math.random() > 0.5,
     }))
@@ -113,6 +121,7 @@ export const Stage = forwardRef<StageHandle, { aspects: Record<string, number> }
    */
   const layout = () => {
     const { vw, vh, mobile } = metrics()
+    if (mobile) return layoutPhone(vw, vh)
     const S = measureSafe()
     const safe: Rect = { left: S.left - 22, right: S.right + 22, top: S.top - 18, bottom: S.bottom + 18 }
     const nav: Rect = { left: vw / 2 - 310, right: vw / 2 + 310, top: 0, bottom: 84 }
@@ -186,9 +195,122 @@ export const Stage = forwardRef<StageHandle, { aspects: Record<string, number> }
     iconHomes.current = ics
   }
 
+  /** The frame of free space around a phone screen's content, where icons may live. */
+  const PHONE = { gutter: 40, topBand: [118, 150] as const, bottomBand: 46, soundCorner: 74 }
+
+  /**
+   * A random spot on that frame, or in the open area below the page's content (`free`), picked
+   * in proportion to each region's size so they all fill evenly.
+   */
+  const phoneSpot = (vw: number, vh: number, d: number, free: Rect | null) => {
+    const { gutter: G, topBand, bottomBand: B, soundCorner } = PHONE
+    const sideLen = vh - topBand[0] - 8
+    const bandLen = vw - 2 * G
+    // the open area counts by its area, measured in strip-thickness units like the strips
+    const freeLen = free ? ((free.right - free.left) * (free.bottom - free.top)) / G : 0
+    const pick = Math.random() * (2 * sideLen + 2 * bandLen + freeLen)
+    const pad = d / 2 + 4
+    if (pick < sideLen) return { x: rand(pad, G), y: rand(topBand[0], vh - pad) }
+    if (pick < 2 * sideLen) return { x: rand(vw - G, vw - pad), y: rand(topBand[0], vh - soundCorner) }
+    if (pick < 2 * sideLen + bandLen) return { x: rand(G, vw - G), y: rand(topBand[0] + d / 2, Math.max(topBand[0] + d / 2, topBand[1] - d / 2)) }
+    if (pick < 2 * sideLen + 2 * bandLen || !free) return { x: rand(G, vw - soundCorner), y: rand(vh - B, vh - pad) }
+    return { x: rand(free.left + pad, free.right - pad), y: rand(free.top + pad, free.bottom - pad) }
+  }
+
+  /** Is this centre point on the phone frame (not in the content column)? */
+  const onPhoneFrame = (x: number, y: number, vw: number, vh: number) =>
+    x < PHONE.gutter || x > vw - PHONE.gutter || (y > PHONE.topBand[0] && y < PHONE.topBand[1]) || y > vh - PHONE.bottomBand
+
+  /** Where the page's content ends on screen (resting positions), so the space below can be used. */
+  const contentBottom = () => {
+    const rects = measureSafeRects('.view > *')
+    return rects.length ? Math.max(...rects.map((r) => r.bottom)) : window.innerHeight
+  }
+
+  /**
+   * Phones: characters peek in from the left and right edges, alternating sides down the screen,
+   * and small icons sit around the frame. When the page's content stops short of the bottom
+   * (the countdown), the open space underneath gets used too: a few characters stand there and
+   * icons scatter across it. Pages that fill that space push them aside (see ringAroundHeaders).
+   */
+  const layoutPhone = (vw: number, vh: number) => {
+    const placed: { x: number; y: number; r: number }[] = []
+    const top = 124 // below the bookmark tabs
+    const bottom = vh - 8
+    const G = PHONE.gutter
+    const span = vw - G - PHONE.soundCorner
+
+    const below = Math.min(vh, contentBottom() + 18)
+    const roomy = vh - below > 160
+    const free: Rect | null = roomy ? { left: G, right: vw - G, top: below, bottom: vh - PHONE.bottomBand } : null
+
+    const baseH = clamp(130, 200, vh * 0.25)
+    const chars: Pose[] = []
+    const all = gsap.utils.shuffle(CHARACTERS.map((_, i) => i))
+
+    // bottom row: with room, a few stand in the open space (feet just off screen);
+    // without, a couple peek up from the bottom edge (head and shoulders)
+    const nBottom = all.length < 5 ? 0 : roomy ? (span >= 260 ? 3 : 2) : span >= 260 ? 2 : span >= 150 ? 1 : 0
+    all.slice(0, nBottom).forEach((i, k) => {
+      const { w, h } = size(i)
+      const tall = roomy ? Math.min(260, (vh - below) / 0.92) : baseH
+      const s = (tall * rand(0.82, 0.95)) / h
+      const vhgt = h * s
+      const body = w * s * 0.6
+      const x = G + (span * (k + 0.5)) / nBottom + rand(-span, span) * 0.05
+      const shown = roomy ? rand(0.86, 0.92) : rand(0.36, 0.42)
+      const y = vh + vhgt * 0.5 - vhgt * shown
+      placed.push({ x, y: vh - (vhgt * shown) / 2, r: body * 0.55 })
+      chars[i] = { x: x - w / 2, y: y - h / 2, scale: s, rotation: rand(-5, 5) }
+    })
+
+    // the rest: spread evenly down both edges, mostly off screen, leaning in
+    const order = all.slice(nBottom)
+    const perSide = Math.ceil(order.length / 2)
+    order.forEach((i, k) => {
+      const left = k % 2 === 0
+      const slot = Math.floor(k / 2)
+      const { w, h } = size(i)
+      const s = (baseH * rand(0.88, 1.12)) / h
+      const vhgt = h * s
+      const body = w * s * 0.6
+      // evenly spaced slots per side, the two sides offset by half a slot so they interleave
+      const step = (bottom - top - vhgt * 0.5) / perSide
+      const y = top + vhgt * 0.45 + step * (slot + (left ? 0.15 : 0.65)) + rand(-step, step) * 0.12
+      const x = left ? body * rand(-0.08, 0.06) : vw - body * rand(-0.08, 0.06)
+      placed.push({ x, y, r: body * 0.5 })
+      chars[i] = { x: x - w / 2, y: y - h / 2, scale: s, rotation: left ? rand(4, 12) : rand(-12, -4) }
+    })
+
+    // icons: small, around the frame and across any open space, as far apart as possible
+    const ics: Pose[] = icons.map((ic) => {
+      const s = rand(0.55, 0.85)
+      const d = ic.size * s
+      const r = d * 0.6
+      let best: { x: number; y: number } | null = null
+      let bestScore = -Infinity
+      for (let t = 0; t < 100; t++) {
+        const { x, y } = phoneSpot(vw, vh, d, free)
+        let sc = Infinity
+        for (const p of placed) sc = Math.min(sc, Math.hypot(x - p.x, y - p.y) - p.r - r)
+        if (sc > bestScore) {
+          bestScore = sc
+          best = { x, y }
+        }
+      }
+      placed.push({ ...best!, r })
+      return { x: best!.x - ic.size / 2, y: best!.y - ic.size / 2, scale: s, rotation: rand(-30, 30) }
+    })
+
+    charHomes.current = chars
+    iconHomes.current = ics
+  }
+
   const stopIdle = () => {
     idle.current.forEach((t) => t.kill())
     idle.current = []
+    rattleTl.current?.kill()
+    rattleTl.current = null
   }
 
   const startIdle = () => {
@@ -206,6 +328,19 @@ export const Stage = forwardRef<StageHandle, { aspects: Record<string, number> }
         }),
       )
     })
+    // the hint: every so often the capsule gives a little rattle
+    const capsule = iconBob.current[CAPSULE]?.querySelector('svg')
+    if (capsule) {
+      const rattle = () => {
+        rattleTl.current = gsap
+          .timeline({ delay: rand(14, 26), onComplete: rattle })
+          .call(() => sfx.tick(1.3, 0.6))
+          .to(capsule, { rotation: 14, duration: 0.06, ease: 'none' })
+          .to(capsule, { rotation: -12, duration: 0.07, ease: 'none', repeat: 3, yoyo: true })
+          .to(capsule, { rotation: 0, duration: 0.4, ease: 'elastic.out(1, 0.4)' })
+      }
+      rattle()
+    }
     charInner.current.forEach((inner, i) => {
       const el = inner.firstElementChild as HTMLElement
       gsap.set(el, { transformOrigin: '50% 100%' })
@@ -408,11 +543,39 @@ export const Stage = forwardRef<StageHandle, { aspects: Record<string, number> }
     const radius = (it: Item) => Math.max(it.vw, it.vh) * 0.5
     const covering = (r: Rect) => safes.find((s) => overlaps(r, s))
 
-    const moving = items.filter((it) => {
+    // Phones: things standing in the middle column (the countdown's open space below its content)
+    // step aside when this page's content reaches down there. Characters sink to peek up from the
+    // bottom edge at the same spot; icons move out to the frame like header-covering ones.
+    const blocks = mobile ? measureSafeRects('.view > *').map((r) => ({ left: r.left - 6, right: r.right + 6, top: r.top - 6, bottom: r.bottom + 6 })) : []
+    const onContent = (r: Rect) => blocks.some((b) => overlaps(r, b))
+    const midColumn = (it: Item) => {
       const c = centre(it)
-      return covering(box(c.x, c.y, it))
+      return !onPhoneFrame(c.x, c.y, vw, vh)
+    }
+    const isChar = (it: Item) => (mobile ? it.vh > 90 : it.vh > 200)
+    if (mobile) {
+      items.forEach((it) => {
+        if (!isChar(it) || !midColumn(it)) return
+        const c = centre(it)
+        if (!onContent(box(c.x, c.y, it))) return
+        const yc = vh + it.vh * 0.5 - it.vh * 0.4
+        out.set(it.el, { x: it.x, y: yc - it.h / 2 })
+      })
+    }
+
+    const moving = items.filter((it) => {
+      // on phones the characters are handled above (edges stay put, the bottom row sinks)
+      if (mobile && isChar(it)) return false
+      const c = centre(it)
+      const b = box(c.x, c.y, it)
+      return covering(b) || (mobile && midColumn(it) && onContent(b))
     })
-    const placed = items.filter((it) => !moving.includes(it)).map((it) => ({ ...centre(it), r: radius(it) }))
+    const placed = items
+      .filter((it) => !moving.includes(it))
+      .map((it) => {
+        const t = out.get(it.el)
+        return t ? { x: t.x + it.w / 2, y: t.y + it.h / 2, r: radius(it) } : { ...centre(it), r: radius(it) }
+      })
 
     // big things first so the small ones fill in around them
     moving.sort((a, b) => b.vw * b.vh - a.vw * a.vh)
@@ -423,7 +586,9 @@ export const Stage = forwardRef<StageHandle, { aspects: Record<string, number> }
       const free = (x: number, y: number) => {
         const b = box(x, y, it)
         const inView = big ? x > 0 && x < vw && y > 0 && y < vh : b.left > 4 && b.right < vw - 4 && b.top > 4 && b.bottom < vh - 4
-        return inView && !covering(b) && !(!big && hidden(b)) && !overlaps(b, nav) && !(!mobile && overlaps(b, timer))
+        // phones: icons only move around the frame (gutters, top and bottom bands), never into the content column
+        const inGutter = !mobile || onPhoneFrame(x, y, vw, vh)
+        return inView && inGutter && !covering(b) && !(!big && hidden(b)) && !overlaps(b, nav) && !(!mobile && overlaps(b, timer))
       }
       const room = (x: number, y: number) => {
         let sc = Infinity
@@ -538,6 +703,19 @@ export const Stage = forwardRef<StageHandle, { aspects: Record<string, number> }
         },
         onThrowComplete() {
           setHome(el)
+        },
+        // the capsule: three quick taps (no dragging) crack it open
+        onClick() {
+          if (i !== CAPSULE) return
+          const now = performance.now()
+          knocks.current = now - lastKnock.current < 700 ? knocks.current + 1 : 1
+          lastKnock.current = now
+          gsap.fromTo(el.querySelector('svg'), { rotation: -18 }, { rotation: 0, duration: 0.5, ease: 'elastic.out(1, 0.4)' })
+          sfx.clack(0.9 + knocks.current * 0.12)
+          if (knocks.current >= 3) {
+            knocks.current = 0
+            openSecret('gacha')
+          }
         },
       })
       drags.current.push(d)

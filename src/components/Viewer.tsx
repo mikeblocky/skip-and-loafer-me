@@ -40,7 +40,7 @@ function Pattern({ seed = 0 }: { seed?: number }) {
 
 /**
  * Japanese manga reads right to left: the spine is on the right, the cover
- * hinges on its right edge and swings open to the right, and "next" goes left.
+ * hinges on its right edge and swings open to the right, while the arrows still read 1 → 2.
  */
 const BASE_Y = 18
 const OPEN_Y = -22
@@ -222,8 +222,8 @@ export function Viewer({
     busy.current = true
     setOpen(false)
     openRef.current = false
-    // right to left: the next volume slides in from the left, the old one leaves to the right
-    const side = -dir
+    // the next volume comes in from the right, so the arrows read 1 → 2
+    const side = dir
     sfx.whoosh(0.45, dir > 0, 0.18, -side * 0.6)
     window.setTimeout(() => sfx.pop(dir > 0 ? 1.1 : 0.9), 420)
     const tl = gsap.timeline({
@@ -249,8 +249,8 @@ export function Viewer({
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') close()
-      if (e.key === 'ArrowLeft') go(1)
-      if (e.key === 'ArrowRight') go(-1)
+      if (e.key === 'ArrowLeft') go(-1)
+      if (e.key === 'ArrowRight') go(1)
       // leave Enter/Space alone on links and buttons so they still work from the keyboard
       const onControl = (e.target as Element | null)?.closest?.('a, button')
       if ((e.key === ' ' || e.key === 'Enter') && !onControl) {
@@ -321,7 +321,7 @@ export function Viewer({
           <Icon name="close" color={C.ink} size={22} />
         </button>
         <div className="v-bar">
-          <button className="round-btn" onClick={() => go(1)} aria-label="Next volume">
+          <button className="round-btn" onClick={() => go(-1)} aria-label="Previous volume">
             <Icon name="chev" color={C.ink} size={24} style={{ transform: 'scaleX(-1)' }} />
           </button>
           <div className="v-meta">
@@ -330,7 +330,7 @@ export function Viewer({
             </span>
             <span className="v-hint">drag to turn · tap to {open ? 'close' : 'open'}</span>
           </div>
-          <button className="round-btn" onClick={() => go(-1)} aria-label="Previous volume">
+          <button className="round-btn" onClick={() => go(1)} aria-label="Next volume">
             <Icon name="chev" color={C.ink} size={24} />
           </button>
         </div>

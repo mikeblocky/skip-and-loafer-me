@@ -13,6 +13,7 @@ import { preloadCovers } from './coverColors'
 import { FlexText } from './components/FlexText'
 import { Icon } from './icons'
 import { Timer } from './components/Timer'
+import { Secrets } from './components/secrets/Secrets'
 import { sfx } from './sfx'
 
 function loadImg(src: string) {
@@ -262,6 +263,8 @@ export default function App() {
       {book !== null && view === 'volumes' && (
         <Viewer key="viewer" index={book} onIndex={setBook} onClose={() => setBook(null)} />
       )}
+
+      {ready && <Secrets />}
 
       <div className="wipe" aria-hidden="true">
         {['#FF2E93', '#FFC400', '#1F6BFF', '#00C46A', '#7B2FFF', '#FF6B00'].map((c) => (

@@ -5,6 +5,7 @@ import { LATEST_VOLUME } from '../volumes'
 import { Icon } from '../icons'
 import { useCoverColors } from '../coverColors'
 import { sfx } from '../sfx'
+import { openSecret } from '../secrets'
 
 const TILTS = [-4, 3, -2, 5, -3, 2, -5, 4, -2, 3, -4, 2, -3, 5]
 
@@ -35,6 +36,18 @@ export function VolumeCards({ hidden, onOpen }: { hidden: number | null; onOpen:
     const settle = () =>
       gsap.to(lean, { v: 0, duration: 1.6, ease: 'elastic.out(1, 0.75)', overwrite: true, onUpdate: setLean })
 
+    // hidden extra: drag the shelf past the very last volume (into the edge resistance) and let go
+    let overPulled = false
+    const end = t.querySelector<HTMLElement>('.vcard-end')
+    const checkPull = function (this: Draggable) {
+      const past = this.x < this.minX - 28
+      if (past !== overPulled) {
+        overPulled = past
+        end?.classList.toggle('is-near', past)
+        if (past) sfx.tick(1.5)
+      }
+    }
+
     const [d] = Draggable.create(t, {
       type: 'x',
       bounds: wrap.current,
@@ -47,10 +60,18 @@ export function VolumeCards({ hidden, onOpen }: { hidden: number | null; onOpen:
         vt.reset(this.x, 0)
         notch = Math.round(this.x / ((t.querySelector<HTMLElement>('.vcard')?.offsetWidth ?? 200) + 18))
       },
-      onDrag: onMove,
+      onDrag(this: Draggable) {
+        onMove.call(this)
+        checkPull.call(this)
+      },
       onThrowUpdate: onMove,
       onRelease(this: Draggable) {
         if (!this.isThrowing) settle()
+        if (overPulled) {
+          overPulled = false
+          end?.classList.remove('is-near')
+          window.setTimeout(() => openSecret('quiz'), 250)
+        }
       },
       onThrowComplete: () => (settle(), sfx.boing()),
       onClick(e: PointerEvent) {
@@ -126,6 +147,10 @@ export function VolumeCards({ hidden, onOpen }: { hidden: number | null; onOpen:
               </div>
             </div>
           ))}
+          {/* a faint hint at the very end of the shelf */}
+          <div className="vcard-end" aria-hidden="true">
+            <span>?</span>
+          </div>
         </div>
       </div>
     </div>

@@ -24,12 +24,18 @@ export interface PlayerProps {
   color: string
   /** timed lyrics, shown Japanese over English */
   subs?: Cue[]
+  /**
+   * A hidden extra: while this word is being sung, the karaoke ball turns gold and the line
+   * can be tapped, which calls onGolden.
+   */
+  goldenWord?: string
+  onGolden?: () => void
 }
 
 const SUBS_KEY = 'sl-subs'
 
 /** A plain <video> with our own controls: play, scrub, time, subtitles, mute, fullscreen. */
-export function Player({ src, poster, kind, title, titleJp, artist, artistJp, color, subs }: PlayerProps) {
+export function Player({ src, poster, kind, title, titleJp, artist, artistJp, color, subs, goldenWord, onGolden }: PlayerProps) {
   const frame = useRef<HTMLDivElement>(null)
   const video = useRef<HTMLVideoElement>(null)
   const track = useRef<HTMLDivElement>(null)
@@ -201,8 +207,26 @@ export function Player({ src, poster, kind, title, titleJp, artist, artistJp, co
             {subs.map((c, i) => {
               const chars = Array.from(c.jp)
               const k = sungIn(i, chars.length)
+              // golden from the moment the word starts until the line ends
+              const at = goldenWord ? Array.from(c.jp.slice(0, Math.max(0, c.jp.indexOf(goldenWord)))).length : -1
+              const golden = i === cue && goldenWord !== undefined && c.jp.includes(goldenWord) && k > at
               return (
-                <p key={i} className={`pl-line${i === cue ? ' is-on' : ''}`} aria-hidden={i !== cue}>
+                <p
+                  key={i}
+                  className={`pl-line${i === cue ? ' is-on' : ''}${golden ? ' is-golden' : ''}`}
+                  aria-hidden={i !== cue}
+                  onPointerDown={
+                    golden
+                      ? (e) => {
+                          e.stopPropagation()
+                          video.current?.pause()
+                          // the surprise opens over the page, so leave fullscreen first
+                          if (document.fullscreenElement) document.exitFullscreen().catch(() => {})
+                          onGolden?.()
+                        }
+                      : undefined
+                  }
+                >
                   <span className="pl-jp" lang="ja" aria-label={c.jp}>
                     {chars.map((ch, j) => (
                       <span

@@ -191,6 +191,47 @@ function noise({ dur, f, f2, q = 1, g = 0.15, a = 0.01, type = 'bandpass', delay
   src.stop(t + dur + 0.03)
 }
 
+/**
+ * A soft whistle / recorder: a sine that swells in, with a little vibrato that arrives late
+ * (the way a person settles into a held note).
+ */
+function whistle({ f, dur, g = 0.06, delay = 0, pan = 0 }: { f: number; dur: number; g?: number; delay?: number; pan?: number }) {
+  const dest = out(pan)
+  if (!ctx || !dest) return
+  f *= TUNE
+  const t = ctx.currentTime + delay
+  const o = ctx.createOscillator()
+  o.type = 'sine'
+  o.frequency.setValueAtTime(f * 0.985, t)
+  o.frequency.exponentialRampToValueAtTime(f, t + 0.05)
+  const lfo = ctx.createOscillator()
+  lfo.frequency.value = 5 + Math.random()
+  const depth = ctx.createGain()
+  depth.gain.setValueAtTime(0, t)
+  depth.gain.linearRampToValueAtTime(f * 0.007, t + Math.min(0.3, dur * 0.7))
+  lfo.connect(depth).connect(o.frequency)
+  const v = ctx.createGain()
+  v.gain.setValueAtTime(0.0001, t)
+  v.gain.exponentialRampToValueAtTime(g, t + 0.045)
+  v.gain.setValueAtTime(g, t + Math.max(0.05, dur - 0.09))
+  v.gain.exponentialRampToValueAtTime(0.0001, t + dur)
+  o.connect(v).connect(dest)
+  o.start(t)
+  lfo.start(t)
+  o.stop(t + dur + 0.05)
+  lfo.stop(t + dur + 0.05)
+}
+
+/** The raw voices, for the music engine (src/music.ts) to schedule ahead on the audio clock. */
+export const voices = {
+  live: () => live(),
+  now: () => ctx?.currentTime ?? 0,
+  tone,
+  noise,
+  pluck,
+  whistle,
+}
+
 const panOf = (x: number) => (x / window.innerWidth) * 2 - 1
 
 /** Notes of a G major pentatonic: nothing clashes, whatever order they come in. */

@@ -320,6 +320,15 @@ const SHAPES = {
       <path d="M24 14v10.5l6.5 4.5" stroke={c} strokeWidth={4.5} strokeLinecap="round" strokeLinejoin="round" fill="none" />
     </g>
   ),
+  /** a gacha capsule: coloured top, white bottom */
+  capsule: ({ c }: P) => (
+    <g>
+      <path d="M6 24a18 18 0 0 1 36 0z" fill={c} />
+      <path d="M6 24h36a18 18 0 0 1-36 0z" fill="#fff" stroke={c} strokeWidth={3.5} />
+      <path d="M4 24h40" stroke={c} strokeWidth={4} strokeLinecap="round" />
+      <ellipse cx="17" cy="14" rx="4" ry="2.6" fill="#fff" opacity={0.55} transform="rotate(-30 17 14)" />
+    </g>
+  ),
 }
 
 export type IconName = keyof typeof SHAPES

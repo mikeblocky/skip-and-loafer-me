@@ -3,3 +3,7 @@ dist
 *.log
 .DS_Store
 .claude
+# secrets (database URLs etc.) stay on this machine and in the host's settings, never in git
+.env
+.env.*
+!.env.example

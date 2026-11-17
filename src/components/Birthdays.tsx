@@ -4,6 +4,7 @@ import { BIRTHDAYS, C, RAINBOW } from '../data'
 import { Icon, SCATTER_ICONS } from '../icons'
 import { FlexText } from './FlexText'
 import { sfx } from '../sfx'
+import { openSecret } from '../secrets'
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
 const START = [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334]
@@ -180,16 +181,38 @@ export function Birthdays() {
 
   useEffect(() => {
     const el = wheel.current!
+    // hidden extra: spin the year round twice in one go (by hand or with a fling)
+    let spun = 0
+    let lastRot = 0
+    const track = () => {
+      const r = gsap.getProperty(el, 'rotation') as number
+      spun += Math.abs(r - lastRot)
+      lastRot = r
+      sync()
+    }
+    const checkSpin = () => {
+      if (spun >= 720) {
+        spun = 0
+        window.setTimeout(() => openSecret('poll'), 350)
+      }
+    }
     const [d] = Draggable.create(el, {
       type: 'rotation',
       inertia: true,
       minimumMovement: 4,
       snap: (v: number) => nearestTurn(v, -list[nearestIndex(v)].a),
-      onDrag: sync,
-      onThrowUpdate: sync,
-      onThrowComplete: pop,
+      onPress() {
+        spun = 0
+        lastRot = gsap.getProperty(el, 'rotation') as number
+      },
+      onDrag: track,
+      onThrowUpdate: track,
+      onThrowComplete: () => (pop(), checkSpin()),
       onRelease(this: Draggable) {
-        if (!this.isThrowing) goTo(nearestIndex(this.rotation))
+        if (!this.isThrowing) {
+          checkSpin()
+          goTo(nearestIndex(this.rotation))
+        }
       },
       onClick(e: PointerEvent) {
         const pin = (e.target as HTMLElement).closest<HTMLElement>('[data-bd]')

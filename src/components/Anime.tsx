@@ -8,6 +8,7 @@ import { Player } from './Player'
 import { Icon } from '../icons'
 import { sfx } from '../sfx'
 import { ED_S1, OP_S1 } from '../lyrics'
+import { openSecret } from '../secrets'
 
 const s1 = (n: number) => `/anime/s1/${n}.jpg`
 const s2 = (n: number) => `/anime/s2/${n}.webp`
@@ -211,6 +212,8 @@ function SeasonDetail({ s }: { s: SeasonInfo }) {
             artist="Rikako Aida"
             color={C.violet}
             subs={ED_S1}
+            goldenWord="スキップ"
+            onGolden={() => openSecret('skip')}
           />
         </div>
       )}
