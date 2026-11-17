@@ -1,0 +1,84 @@
+import { useEffect, useRef, useState, type CSSProperties } from 'react'
+import { gsap } from '../gsap'
+import { C } from '../data'
+import { Icon, type IconName } from '../icons'
+
+export type NavId = 'countdown' | 'volumes' | 'birthdays' | 'anime' | 'replay'
+
+const ITEMS: { id: NavId; label: string; color: string; icon: IconName; ink?: boolean; tilt: number }[] = [
+  { id: 'countdown', label: 'Countdown', color: C.pink, icon: 'clock', tilt: -4 },
+  { id: 'volumes', label: 'Volumes', color: C.blue, icon: 'book', tilt: 3 },
+  { id: 'birthdays', label: 'Birthdays', color: C.green, icon: 'bow', tilt: 2 },
+  { id: 'anime', label: 'Anime', color: C.orange, icon: 'film', tilt: -3 },
+  { id: 'replay', label: 'Replay', color: C.violet, icon: 'replay', tilt: -2 },
+]
+
+const small = () => window.innerWidth < 760
+const ACTIVE = 0
+const rest = () => (small() ? -50 : -58)
+const lift = () => (small() ? -30 : -34)
+
+function Mark({
+  item,
+  active,
+  onSelect,
+}: {
+  item: (typeof ITEMS)[number]
+  active: boolean
+  onSelect: (id: NavId) => void
+}) {
+  const ref = useRef<HTMLButtonElement>(null)
+  const [hover, setHover] = useState(false)
+  const first = useRef(true)
+
+  useEffect(() => {
+    const y = active ? ACTIVE : hover ? lift() : rest()
+    const rotation = active || hover ? 0 : item.tilt
+    if (first.current) {
+      first.current = false
+      gsap.set(ref.current, { y, rotation, transformOrigin: '50% 0%' })
+      return
+    }
+    gsap.to(ref.current, { y, rotation, duration: active ? 0.9 : 0.7, ease: active ? 'elastic.out(1, 0.45)' : 'elastic.out(1, 0.55)', overwrite: 'auto' })
+  }, [active, hover])
+
+  const press = () => {
+    const el = ref.current
+    if (item.id === 'replay') {
+      gsap.fromTo(el, { y: 6 }, { y: hover ? lift() : rest(), duration: 0.9, ease: 'elastic.out(1, 0.4)' })
+      gsap.fromTo(el!.querySelector('svg'), { rotation: 0 }, { rotation: -360, duration: 0.8, ease: 'back.out(1.6)' })
+    } else if (!active) {
+      gsap.fromTo(el, { y: lift() }, { y: 14, duration: 0.18, ease: 'power2.out' })
+    }
+    onSelect(item.id)
+  }
+
+  return (
+    <button
+      ref={ref}
+      className={`mark mark--${item.id}${active ? ' is-active' : ''}${item.ink ? ' is-ink' : ''}`}
+      style={{ '--c': item.color, color: item.ink ? C.ink : '#fff' } as CSSProperties}
+      onPointerEnter={() => setHover(true)}
+      onPointerLeave={() => setHover(false)}
+      onFocus={() => setHover(true)}
+      onBlur={() => setHover(false)}
+      onClick={press}
+      aria-current={active ? 'page' : undefined}
+    >
+      <span className="mark-ribbon">
+        <Icon name={item.icon} color={item.ink ? C.ink : '#fff'} size={22} />
+        <span className="mark-label">{item.label}</span>
+      </span>
+    </button>
+  )
+}
+
+export function Bookmarks({ view, onSelect }: { view: NavId; onSelect: (id: NavId) => void }) {
+  return (
+    <nav className="bookmarks" aria-label="Sections">
+      {ITEMS.map((it) => (
+        <Mark key={it.id} item={it} active={view === it.id} onSelect={onSelect} />
+      ))}
+    </nav>
+  )
+}
