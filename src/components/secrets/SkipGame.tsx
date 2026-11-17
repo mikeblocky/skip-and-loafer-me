@@ -4,6 +4,10 @@ import { Icon, type IconName } from '../../icons'
 import { sfx } from '../../sfx'
 import { secrets } from '../../secrets'
 import { music } from '../../music'
+import { FIRST_PAGE, makePage, type Page } from './pages'
+
+/** every this many points, the road turns to a freshly generated page with a new leader */
+const PAGE_EVERY = 10000
 
 /** Things on the road: the site's own stickers. */
 const GROUND: { name: IconName; color: string }[] = [
@@ -43,7 +47,7 @@ const POOL = 24
  * through it or with a single hop (bottoms 15–95 units up; a hop reaches ~168).
  */
 const POWERS: Record<string, { icon: IconName; color: string; label: string; secs: number }> = {
-  clover: { icon: 'clover', color: C.green, label: 'lucky shield!', secs: 8 },
+  clover: { icon: 'clover', color: C.green, label: 'lucky shield!', secs: 6 },
   note: { icon: 'note', color: C.violet, label: 'double points!', secs: 8 },
   sun: { icon: 'sun', color: C.amber, label: 'star magnet!', secs: 7 },
   bolt: { icon: 'bolt', color: C.orange, label: 'triple skip!', secs: 8 },
@@ -72,16 +76,34 @@ const BREAK_LEN = 7
  */
 const TWIST_AT = 5000
 const TWIST_STACK_AT = 8000
-const TWIST_LEN = 8
-const TWIST_GAP = 11
+/** from here twists last longer and come more often */
+const TWIST_LONG_AT = 9000
+/** from here: near-constant twists, up to three at once, new events, a much denser road */
+const MAYHEM_AT = 10000
+/** [seconds a twist lasts, seconds between twists], by stage */
+const twistTiming = (score: number) =>
+  score >= MAYHEM_AT ? { len: 13, gap: 3.5 } : score >= TWIST_LONG_AT ? { len: 11, gap: 6 } : { len: 8, gap: 11 }
 const TWISTS = {
-  tilt: 'the road tilts!',
-  mirror: 'mirror world!',
-  zoom: 'zoomed in!',
-  dark: 'lights out!',
-  sway: 'sea legs!',
+  tilt: { label: 'the road tilts!', from: TWIST_AT },
+  mirror: { label: 'mirror world!', from: TWIST_AT },
+  zoom: { label: 'zoomed in!', from: TWIST_AT },
+  dark: { label: 'lights out!', from: TWIST_AT },
+  sway: { label: 'sea legs!', from: TWIST_AT },
+  // ── new events, 10k+ ──
+  quake: { label: 'earthquake!', from: MAYHEM_AT }, // the whole picture shakes hard
+  moon: { label: 'moon gravity!', from: MAYHEM_AT }, // floaty hops that reach the paper planes
+  rush: { label: 'rush hour!', from: MAYHEM_AT }, // a burst of speed past the usual top speed
+  storm: { label: 'paper plane storm!', from: MAYHEM_AT }, // planes pour in at every height
+  flicker: { label: 'flickering lights!', from: MAYHEM_AT }, // the lights strobe on and off
 } as const
 type Twist = keyof typeof TWISTS
+/** moon gravity: hops float this much longer (and higher) */
+const MOON = 0.55
+/** rush hour: road speed multiplier, and how far past the usual top speed it may go */
+const RUSH = 1.3
+/** past 10k, a pause after each heart / power-up before the next one can appear (seconds) */
+const HEART_COOLDOWN = 8
+const POWER_COOLDOWN = 6
 /** the paper warms a little with each friend, then glows once everyone's there */
 const TINTS = ['#ffffff', '#fffcf2', '#fff8e8', '#fff3ee', '#fdf0f6', '#f5f1ff', '#eef5ff']
 const WON_TINT = '#fff6d8'
@@ -170,6 +192,9 @@ export function SkipGame() {
   const [best, setBest] = useState(secrets.get().skipBest)
   const [lives, setLives] = useState(LIVES)
   const [team, setTeam] = useState<typeof FRIENDS>([])
+  /** the page (look, objects and leader) the road is on right now */
+  const [page, setPage] = useState<Page>(FIRST_PAGE)
+  const [flipping, setFlipping] = useState(false)
   const [won, setWon] = useState(false)
   const [shout, setShout] = useState<string | null>(null)
   const [looks, setLooks] = useState<{ kind: Kind; look: number }[]>(() => Array.from({ length: POOL }, () => ({ kind: 'ground', look: 0 })))
@@ -210,7 +235,13 @@ export function SkipGame() {
     tier: 0,
     playT: 0, // seconds since the last break
     twistT: 0, // seconds left on the current twist(s)
-    twistWait: TWIST_GAP, // seconds until the next one may start
+    active: [] as Twist[], // twists running right now
+    stormT: 0, // countdown to the next storm plane
+    pageN: 0, // which page of the road we're on (one per PAGE_EVERY points)
+    leader: 'mitsumi',
+    heartCd: 0, // 10k+: seconds until another heart may appear
+    powerCd: 0, // 10k+: seconds until another power-up may appear
+    twistWait: 11, // seconds until the next one may start
     breakT: 0, // seconds of break left
     buffer: 0,
     fy: [0, 0, 0, 0, 0, 0],
@@ -262,7 +293,13 @@ export function SkipGame() {
     s.playT = 0
     s.breakT = 0
     s.twistT = 0
-    s.twistWait = TWIST_GAP
+    s.active = []
+    s.heartCd = 0
+    s.pageN = 0
+    s.leader = FIRST_PAGE.leader
+    setPage(FIRST_PAGE)
+    s.powerCd = 0
+    s.twistWait = 11
     setTwists([])
     music.setRest(false)
     setRest(0)
@@ -403,25 +440,45 @@ export function SkipGame() {
         s.twistT = Math.max(0, s.twistT - dt)
         if (s.twistT === 0 || s.breakT > 0) {
           s.twistT = 0
+          s.active = []
           setTwists([])
         }
       } else if (s.score >= TWIST_AT && s.breakT <= 0) {
         s.twistWait -= dt
         if (s.twistWait <= 0) {
-          const names = (Object.keys(TWISTS) as Twist[]).sort(() => Math.random() - 0.5)
-          const picked = names.slice(0, s.score >= TWIST_STACK_AT && Math.random() < 0.55 ? 2 : 1)
-          s.twistT = TWIST_LEN
-          s.twistWait = TWIST_GAP * (0.8 + Math.random() * 0.5)
+          const { len, gap } = twistTiming(s.score)
+          const shuffle = <T,>(a: T[]) => a.map((v) => [Math.random(), v] as const).sort((x, y) => x[0] - y[0]).map(([, v]) => v)
+          const open = (Object.keys(TWISTS) as Twist[]).filter((k) => s.score >= TWISTS[k].from)
+          const fresh = shuffle(open.filter((k) => TWISTS[k].from === MAYHEM_AT))
+          const older = shuffle(open.filter((k) => TWISTS[k].from !== MAYHEM_AT))
+          // from 10k the new events usually lead, so you actually meet them
+          const names = s.score >= MAYHEM_AT && Math.random() < 0.65 ? [...fresh, ...older] : shuffle(open)
+          const count =
+            s.score >= MAYHEM_AT ? (Math.random() < 0.4 ? 3 : 2) : s.score >= TWIST_STACK_AT && Math.random() < 0.55 ? 2 : 1
+          // lights out and flickering lights would fight over the same overlay; never stack them
+          const picked: Twist[] = []
+          for (const n of names) {
+            if (picked.length >= count) break
+            if (n === 'dark' && picked.includes('flicker')) continue
+            if (n === 'flicker' && picked.includes('dark')) continue
+            picked.push(n)
+          }
+          s.twistT = len
+          s.twistWait = gap * (0.8 + Math.random() * 0.5)
+          s.active = picked
+          if (picked.includes('rush')) s.speed = Math.min(MAX_SPEED * RUSH, s.speed * RUSH)
           setTiltDir(Math.random() < 0.5 ? -1 : 1)
           setTwists(picked)
-          say(picked.map((t) => TWISTS[t]).join(' + '), 1800)
-          sfx.whoosh(0.5, true, 0.12)
+          say(picked.map((t) => TWISTS[t].label).join(' + '), 2000)
+          sfx.whoosh(0.5, true, 0.14)
         }
       }
       if (s.breakT <= 0) s.speed += 24 * dt * Math.max(0.3, 1 - (s.speed - START_SPEED) / 1100)
       // ...up to a ceiling a person can still react at (clutter crosses the screen in ~½s); past that,
       // the harder road patterns keep raising the difficulty instead
-      s.speed = Math.min(MAX_SPEED, s.speed)
+      // past the cap (rush hour just ended), ease back down instead of snapping
+      const cap = MAX_SPEED * (s.active.includes('rush') ? RUSH : 1)
+      if (s.speed > cap) s.speed = Math.max(cap, s.speed - (s.speed - cap) * Math.min(1, dt * 1.5) - 40 * dt)
       s.dist += s.speed * dt
       // the band speeds up with the road: ~112 bpm at the start, up to ~172 when it's frantic
       music.setPace(116 + (s.speed - START_SPEED) * 0.09 - (s.breakT > 0 ? 10 : 0))
@@ -441,7 +498,8 @@ export function SkipGame() {
       if (player.current) player.current.classList.toggle('is-shield', s.pw.clover > 0)
 
       // Mitsumi
-      s.vy -= GRAVITY * dt
+      const grav = GRAVITY * (s.active.includes('moon') ? MOON : 1)
+      s.vy -= grav * dt
       s.y = Math.max(0, s.y + s.vy * dt)
       if (s.y === 0) {
         s.vy = 0
@@ -462,7 +520,7 @@ export function SkipGame() {
       friendEls.current.forEach((el, k) => {
         if (!el) return
         const fx = PX - FRIEND_GAP * (k + 1)
-        s.fvy[k] -= GRAVITY * dt
+        s.fvy[k] -= grav * dt
         s.fy[k] = Math.max(0, s.fy[k] + s.fvy[k] * dt)
         if (s.fy[k] === 0) {
           s.fvy[k] = 0
@@ -475,6 +533,27 @@ export function SkipGame() {
         }
         el.style.transform = `translateY(${-s.fy[k]}px)`
       })
+      // a new page every PAGE_EVERY points: new look, new objects, a new leader
+      const pageN = Math.floor(s.score / PAGE_EVERY)
+      if (pageN > s.pageN) {
+        s.pageN = pageN
+        const next = makePage(pageN, s.leader)
+        s.leader = next.leader
+        // clear the road so the switch is fair, and give a beat before the next pattern
+        s.things.forEach((t, i) => {
+          t.on = false
+          const el = thingEls.current[i]
+          if (el) el.style.opacity = '0'
+        })
+        s.next = Math.max(s.next, 1.4)
+        setPage(next)
+        setFlipping(true)
+        window.setTimeout(() => setFlipping(false), 800)
+        const lead = CHARACTERS.find((c) => c.id === next.leader)?.name.toLowerCase() ?? 'someone'
+        say(`new page! ${lead} leads the way`, 2400)
+        sfx.rustle()
+        music.remix()
+      }
       const tier = tierOf(s.friends, s.score)
       if (tier > s.tier) {
         s.tier = tier
@@ -515,6 +594,15 @@ export function SkipGame() {
 
       // spawning gets denser and meaner with speed
       s.next -= dt
+      s.heartCd = Math.max(0, s.heartCd - dt)
+      s.powerCd = Math.max(0, s.powerCd - dt)
+      if (s.active.includes('storm')) {
+        s.stormT -= dt
+        if (s.stormT <= 0) {
+          s.stormT = 0.45 + Math.random() * 0.35
+          spawn('plane', w + 40 + Math.random() * 60, 92 + Math.random() * 110, Math.random() < 0.3 ? 'zigzag' : 'normal')
+        }
+      }
       if (s.next <= 0) {
         const lvl = Math.min(1, (s.speed - START_SPEED) / 520)
         const T = s.tier
@@ -527,7 +615,8 @@ export function SkipGame() {
             spawn(choices[Math.floor(Math.random() * choices.length)], w + 20)
           } else spawn('star', w + 20)
         } else if (s.score > 60 && r < 0.14 + lvl * 0.12) spawn('plane', w + 40)
-        else if (s.score > 15 && r < Math.min(0.34, 0.26 + lvl * 0.06 + T * 0.012)) {
+        else if (s.score > 15 && r < Math.min(0.34, 0.26 + lvl * 0.06 + T * 0.012) && s.powerCd <= 0) {
+          if (s.score >= MAYHEM_AT) s.powerCd = POWER_COOLDOWN
           // a power-up, never one that is already running
           const choices = (Object.keys(POWERS) as Power[]).filter((k) => k === 'sparkle' || s.pw[k as Timed] <= 0)
           // the wilder the road, the more often the golden heart is the one on offer
@@ -535,7 +624,10 @@ export function SkipGame() {
           else spawn(choices[Math.floor(Math.random() * choices.length)], w + 20)
         } else if (r < 0.42 + lvl * 0.08) spawn('star', w + 20)
         // hearts turn up more often with every level
-        else if (s.lives < LIVES && r < 0.45 + lvl * 0.05 + T * 0.02 + Math.max(0, T - 5) * 0.015) spawn('heart', w + 20)
+        else if (s.lives < LIVES && r < 0.45 + lvl * 0.05 + T * 0.02 + Math.max(0, T - 5) * 0.015 && s.heartCd <= 0) {
+          if (s.score >= MAYHEM_AT) s.heartCd = HEART_COOLDOWN
+          spawn('heart', w + 20)
+        }
         else {
           // pick a road pattern; the plain single gets rarer as the tiers climb
           const open = COMBOS.filter((c) => c.from <= T || (c.name === 'pair' && lvl > 0.3))
@@ -581,13 +673,17 @@ export function SkipGame() {
             const air: ComboName[] = ['zigzag', 'swarm', 'rain', 'under']
             pattern(road[Math.floor(Math.random() * road.length)], x0)
             pattern(air[Math.floor(Math.random() * air.length)], x0 + 140 + Math.random() * 80)
+            // past 10k, often a third pattern on top
+            if (s.score >= MAYHEM_AT && Math.random() < 0.55) pattern(road[Math.floor(Math.random() * road.length)], x0 + 300 + Math.random() * 80)
           } else pattern(combo, x0)
-          // from the win on, the odd extra bit of clutter slips in between patterns
-          if (T >= 6 && Math.random() < Math.min(0.45, (T - 5) * 0.07)) pattern(Math.random() < 0.5 ? 'single' : 'bounce', x0 + 260 + Math.random() * 120)
+          // from the win on, the odd extra bit of clutter slips in between patterns (much more past 10k)
+          const extra = s.score >= MAYHEM_AT ? 0.8 : Math.min(0.45, (T - 5) * 0.07)
+          if (T >= 6 && Math.random() < extra) pattern(Math.random() < 0.5 ? 'single' : 'bounce', x0 + 260 + Math.random() * 120)
+          if (s.score >= MAYHEM_AT && Math.random() < 0.5) pattern(Math.random() < 0.5 ? 'roll' : 'drop', x0 + 420 + Math.random() * 120)
           // let the pattern clear before the next one
           if (combo === 'triple' || combo === 'under' || combo === 'chaos' || combo === 'swarm' || combo === 'rain') s.next += 0.3
         }
-        s.next += (0.65 + Math.random() * 0.8) * (340 / s.speed) + 0.36 - Math.min(0.12, T * 0.015)
+        s.next += (0.65 + Math.random() * 0.8) * (340 / s.speed) + 0.36 - Math.min(s.score >= MAYHEM_AT ? 0.22 : 0.12, T * 0.015)
       }
 
       // move, draw and check every thing
@@ -656,9 +752,10 @@ export function SkipGame() {
             for (let j = 0; j < n; j++) spawn('star', w + 20 + j * 38, 20 + Math.sin((j / (n - 1)) * Math.PI) * 70)
           } else {
             // boosts last longer as the tiers climb
-            s.pw[k] = POWERS[k].secs * (1 + 0.06 * Math.min(8, s.tier))
+            // the clover stays short and single-use at every level; the rest grow a little with the level
+            s.pw[k] = k === 'clover' ? POWERS[k].secs : POWERS[k].secs * (1 + 0.06 * Math.min(8, s.tier))
             // from tier 3 the clover holds off two hits
-            if (k === 'clover') s.shieldHits = s.tier >= 3 ? 2 : 1
+            if (k === 'clover') s.shieldHits = 1
           }
           say(POWERS[k].label)
           sfx.chime(1.4, 0.7)
@@ -673,7 +770,7 @@ export function SkipGame() {
           // the lucky clover takes the hit instead
           s.shieldHits--
           if (s.shieldHits <= 0) s.pw.clover = 0
-          s.hurt = 0.7
+          s.hurt = 0.5
           sfx.boing()
           say(s.shieldHits > 0 ? 'the clover held! one more block left' : 'phew, the clover saved you!')
         } else if (s.hurt <= 0 && s.pw.goldheart > 0) {
@@ -762,7 +859,7 @@ export function SkipGame() {
       </div>
 
       <div
-        className={`sg-field is-${phase}${won ? ' is-won' : ''}${rest > 0 ? ' is-break' : ''}${twists.map((t) => ' tw-' + t).join('')}`}
+        className={`sg-field is-${phase}${won ? ' is-won' : ''}${rest > 0 ? ' is-break' : ''}${flipping ? ' is-flip' : ''}${twists.map((t) => ' tw-' + t).join('')}`}
         ref={field}
         onPointerDown={(e) => {
           e.preventDefault()
@@ -771,7 +868,11 @@ export function SkipGame() {
         style={
           {
             height: view.h,
-            '--tint': tint,
+            '--tint': page.n > 0 ? page.paper : tint,
+            '--page-lines': page.lines || 'none',
+            '--page-size': page.lineSize,
+            '--page-margin': page.margin,
+            '--page-floor': page.floor,
             '--tilt': `${tiltDir * 7}deg`,
             // Where Mitsumi is on screen. Tilt and zoom pivot on her; the mirror flips around the
             // middle (so the road ahead stays on screen) and the spotlight follows her across.
@@ -797,21 +898,21 @@ export function SkipGame() {
           style={{ width: view.w, height: view.h / view.scale, transform: `scale(${view.scale})`, '--floor': `${FLOOR}px` } as CSSProperties}
         >
           <div className="sg-doodles" aria-hidden="true">
-            {DOODLES.map((n, i) => (
+            {page.doodles.map((n, i) => (
               <div
-                key={n}
+                key={i}
                 className="sg-doodle"
                 ref={(el) => {
                   if (el) doodleEls.current[i] = el
                 }}
               >
-                <Icon name={n} color={C.ink} size={i % 2 ? 30 : 44} />
+                <Icon name={n} color={page.doodleColor} size={i % 2 ? 30 : 44} />
               </div>
             ))}
           </div>
           <div className="sg-floor" ref={ground} aria-hidden="true" />
 
-          {team.map((f, k) => (
+          {(page.leader === 'mitsumi' ? team : CHARACTERS.filter((c) => c.id !== page.leader)).map((f, k) => (
             <div
               key={f.id}
               className="sg-friend"
@@ -824,16 +925,19 @@ export function SkipGame() {
             </div>
           ))}
           <div className="sg-player" ref={player} style={{ left: PX, height: PLAYER_H }}>
-            <img src="/characters/mitsumi.png" alt="Mitsumi" draggable={false} />
+            {(() => {
+              const lead = CHARACTERS.find((c) => c.id === page.leader) ?? CHARACTERS[0]
+              return <img key={lead.id} src={lead.src} alt={lead.name} draggable={false} />
+            })()}
           </div>
 
           {Array.from({ length: POOL }, (_, i) => {
             const L = looks[i]
             const icon =
               L.kind === 'ground' || L.kind === 'drop'
-                ? GROUND[L.look]
+                ? page.ground[L.look % page.ground.length]
                 : L.kind === 'plane'
-                  ? { name: 'plane' as IconName, color: C.sky }
+                  ? page.air
                   : L.kind === 'star'
                     ? { name: 'star' as IconName, color: C.yellow }
                     : isPower(L.kind)
