@@ -39,13 +39,12 @@ function metrics() {
   return { vw, vh, mobile, H }
 }
 
-/** Bounding box of the page's central content. Nothing lands inside it. */
-function measureSafe(): Rect {
-  const { vw, vh } = metrics()
-  const els = Array.from(document.querySelectorAll<HTMLElement>('.view [data-safe]'))
-  if (!els.length) return { left: vw * 0.3, right: vw * 0.7, top: vh * 0.25, bottom: vh * 0.7 }
-  const r = { left: Infinity, right: -Infinity, top: Infinity, bottom: -Infinity }
-  els.forEach((el) => {
+/**
+ * Resting boxes of the page's protected content. By default everything marked data-safe;
+ * pass a narrower selector (e.g. just the headings) to measure only those.
+ */
+function measureSafeRects(selector = '.view [data-safe]'): Rect[] {
+  return Array.from(document.querySelectorAll<HTMLElement>(selector)).map((el) => {
     // undo any in-flight intro transform so the box is where the element will rest
     const b = el.getBoundingClientRect()
     const ty = gsap.getProperty(el, 'y') as number
@@ -54,12 +53,21 @@ function measureSafe(): Rect {
     const h = b.height / sc
     const cx = b.left + b.width / 2
     const cy = b.top + b.height / 2 - ty
-    r.left = Math.min(r.left, cx - w / 2)
-    r.right = Math.max(r.right, cx + w / 2)
-    r.top = Math.min(r.top, cy - h / 2)
-    r.bottom = Math.max(r.bottom, cy + h / 2)
+    return { left: cx - w / 2, right: cx + w / 2, top: cy - h / 2, bottom: cy + h / 2 }
   })
-  return r
+}
+
+/** Bounding box of the page's central content. Nothing lands inside it. */
+function measureSafe(): Rect {
+  const { vw, vh } = metrics()
+  const rects = measureSafeRects()
+  if (!rects.length) return { left: vw * 0.3, right: vw * 0.7, top: vh * 0.25, bottom: vh * 0.7 }
+  return rects.reduce((r, b) => ({
+    left: Math.min(r.left, b.left),
+    right: Math.max(r.right, b.right),
+    top: Math.min(r.top, b.top),
+    bottom: Math.max(r.bottom, b.bottom),
+  }))
 }
 
 const overlaps = (a: Rect, b: Rect) => a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top
@@ -77,9 +85,10 @@ export const Stage = forwardRef<StageHandle, { aspects: Record<string, number> }
   const idle = useRef<gsap.core.Tween[]>([])
   const charHomes = useRef<Pose[]>([])
   const iconHomes = useRef<Pose[]>([])
-  // spots saved before clearing the reading lane, so they can come back afterwards
-  const parked = useRef<Map<HTMLElement, number> | null>(null)
-  const touched = useRef(new Set<HTMLElement>())
+  // where each thing belongs: its scattered spot, or wherever you last dropped it.
+  // Pages only nudge things away from home temporarily; they go back once it's clear again.
+  const home = useRef(new Map<HTMLElement, { x: number; y: number }>())
+  const setHome = (el: HTMLElement) => home.current.set(el, { x: gsap.getProperty(el, 'x') as number, y: gsap.getProperty(el, 'y') as number })
 
   const icons = useMemo(() => {
     const small = window.innerWidth < 760
@@ -227,6 +236,9 @@ export const Stage = forwardRef<StageHandle, { aspects: Record<string, number> }
       drags.current.forEach((d) => d.disable())
       applySizes()
       layout()
+      home.current.clear()
+      charEls.current.forEach((el, i) => home.current.set(el, { x: charHomes.current[i].x, y: charHomes.current[i].y }))
+      iconEls.current.forEach((el, i) => home.current.set(el, { x: iconHomes.current[i].x, y: iconHomes.current[i].y }))
       gsap.killTweensOf([...charEls.current, ...iconEls.current, ...charInner.current])
       gsap.set(charEls.current, { autoAlpha: 1, transformOrigin: '50% 50%' })
       gsap.set(iconEls.current, { autoAlpha: 1, transformOrigin: '50% 50%' })
@@ -317,54 +329,134 @@ export const Stage = forwardRef<StageHandle, { aspects: Record<string, number> }
       startIdle()
     },
 
-    // Everything keeps its spot (including where you dragged it) when the page changes,
-    // except on reading pages, where whatever sits in the middle steps aside to the nearest edge.
-    setMode(m: Mode) {
-      if (m === 'anime') clearLane()
-      else restoreLane()
+    // Everything keeps its spot (including where you dragged it) when the page changes, except
+    // what would cover the new page's header, which steps out into an even ring around it.
+    setMode(_m: Mode) {
+      arrange()
       updateBounds()
     },
   }))
 
-  function clearLane() {
-    if (parked.current) return
-    const { vw } = metrics()
-    const half = Math.min(vw / 2 - 16, 440)
-    const saved = new Map<HTMLElement, number>()
-    touched.current.clear()
-    const push = (el: HTMLElement, w: number, scale: number) => {
-      const x = gsap.getProperty(el, 'x') as number
-      const vwid = w * scale
-      const cx = x + w / 2
-      if (Math.abs(cx - vw / 2) > half + vwid * 0.2) return
-      const left = cx < vw / 2
-      const room = vw / 2 - half
-      // tuck into the side gutter; on narrow screens that means half off the edge
-      const target =
-        room > vwid * 0.7
-          ? left
-            ? gsap.utils.random(vwid * 0.45, Math.max(vwid * 0.46, room - vwid * 0.55))
-            : vw - gsap.utils.random(vwid * 0.45, Math.max(vwid * 0.46, room - vwid * 0.55))
-          : left
-            ? -vwid * 0.05
-            : vw + vwid * 0.05
-      saved.set(el, x)
-      gsap.to(el, { x: target - w / 2, duration: 0.9, ease: 'back.inOut(1.3)', delay: gsap.utils.random(0, 0.15) })
-    }
-    charEls.current.forEach((el) => push(el, el.offsetWidth, gsap.getProperty(el, 'scale') as number))
-    iconEls.current.forEach((el) => push(el, el.offsetWidth, gsap.getProperty(el, 'scale') as number))
-    parked.current = saved
+  interface Item {
+    el: HTMLElement
+    /** resting top-left (gsap x/y) before this page's adjustments */
+    x: number
+    y: number
+    w: number
+    h: number
+    /** visible size: characters are mostly transparent at the sides */
+    vw: number
+    vh: number
   }
 
-  function restoreLane() {
-    const saved = parked.current
-    if (!saved) return
-    parked.current = null
-    saved.forEach((x, el) => {
-      // anything you moved by hand on the reading page stays where you put it
-      if (touched.current.has(el)) return
-      gsap.to(el, { x, duration: 0.9, ease: 'back.inOut(1.3)', delay: gsap.utils.random(0, 0.15) })
+  /**
+   * Same rule on every page: everything goes to its home spot, except things whose home would
+   * cover this page's header, which step to the nearest free spot around it. Nothing else moves.
+   */
+  function arrange() {
+    const { vw, vh, mobile } = metrics()
+    const items: Item[] = [
+      ...charEls.current.map((el) => ({ el, char: true })),
+      ...iconEls.current.map((el) => ({ el, char: false })),
+    ].map(({ el, char }) => {
+      const s = (gsap.getProperty(el, 'scale') as number) || 1
+      const w = el.offsetWidth
+      const h = el.offsetHeight
+      const at = home.current.get(el) ?? { x: gsap.getProperty(el, 'x') as number, y: gsap.getProperty(el, 'y') as number }
+      return { el, x: at.x, y: at.y, w, h, vw: w * s * (char ? 0.6 : 1), vh: h * s }
     })
+    const nudged = ringAroundHeaders(items, vw, vh, mobile)
+    items.forEach((it) => {
+      const t = nudged.get(it.el) ?? { x: it.x, y: it.y }
+      const cx = gsap.getProperty(it.el, 'x') as number
+      const cy = gsap.getProperty(it.el, 'y') as number
+      if (Math.abs(t.x - cx) < 1 && Math.abs(t.y - cy) < 1) return
+      gsap.to(it.el, { x: t.x, y: t.y, duration: 0.9, ease: 'back.inOut(1.3)', delay: rand(0, 0.15) })
+    })
+  }
+
+  /**
+   * Anything covering a header (or other protected content) steps to the nearest free spot
+   * around where it was, keeping a little room from its neighbours, so things spread out
+   * locally on every side instead of all gathering in one place.
+   */
+  function ringAroundHeaders(items: Item[], vw: number, vh: number, mobile: boolean) {
+    const out = new Map<HTMLElement, { x: number; y: number }>()
+    // clearance is wider than the idle bob (±12px plus a little tilt), so floating never drifts onto text
+    const PAD = 22
+    // only text (titles and hints) pushes things away; cards, the clock and the TVs are drawn
+    // above the stage, so something standing behind them is fine and shouldn't be shuffled
+    const safes = measureSafeRects('.view :is(h1, h2, p)[data-safe]').map((r) => ({
+      left: r.left - PAD,
+      right: r.right + PAD,
+      top: r.top - PAD,
+      bottom: r.bottom + PAD,
+    }))
+    if (!safes.length) return out
+    // small icons also shouldn't land hidden behind the page's other content
+    const solid = measureSafeRects('.view [data-safe]:not(:is(h1, h2, p))')
+    const hidden = (r: Rect) => solid.some((s) => overlaps(r, s))
+    const nav: Rect = { left: vw / 2 - 310, right: vw / 2 + 310, top: 0, bottom: 84 }
+    const timer: Rect = { left: vw - 340, right: vw, top: 0, bottom: 76 }
+    const box = (cx: number, cy: number, it: Item): Rect => ({
+      left: cx - it.vw / 2,
+      right: cx + it.vw / 2,
+      top: cy - it.vh / 2,
+      bottom: cy + it.vh / 2,
+    })
+    const centre = (it: Item) => ({ x: it.x + it.w / 2, y: it.y + it.h / 2 })
+    const radius = (it: Item) => Math.max(it.vw, it.vh) * 0.5
+    const covering = (r: Rect) => safes.find((s) => overlaps(r, s))
+
+    const moving = items.filter((it) => {
+      const c = centre(it)
+      return covering(box(c.x, c.y, it))
+    })
+    const placed = items.filter((it) => !moving.includes(it)).map((it) => ({ ...centre(it), r: radius(it) }))
+
+    // big things first so the small ones fill in around them
+    moving.sort((a, b) => b.vw * b.vh - a.vw * a.vh)
+    moving.forEach((it) => {
+      const from = centre(it)
+      const r = radius(it)
+      const big = it.vh > 200
+      const free = (x: number, y: number) => {
+        const b = box(x, y, it)
+        const inView = big ? x > 0 && x < vw && y > 0 && y < vh : b.left > 4 && b.right < vw - 4 && b.top > 4 && b.bottom < vh - 4
+        return inView && !covering(b) && !(!big && hidden(b)) && !overlaps(b, nav) && !(!mobile && overlaps(b, timer))
+      }
+      const room = (x: number, y: number) => {
+        let sc = Infinity
+        for (const p of placed) sc = Math.min(sc, Math.hypot(x - p.x, y - p.y) - p.r - r)
+        return sc
+      }
+      // Step out from where it already is: search rings of growing radius around its own spot
+      // and take the closest free place that also leaves breathing room from its neighbours.
+      // Things over the left of a header go left or up/down there, things on the right go right.
+      const GAP = big ? 0 : 14
+      let best: { x: number; y: number } | null = null
+      let fallback: { x: number; y: number; room: number } | null = null
+      for (let dist = 24; dist < Math.max(vw, vh) && !best; dist += 18) {
+        const tries = Math.ceil((2 * Math.PI * dist) / 22)
+        const offset = rand(0, Math.PI * 2)
+        let ringBest: { x: number; y: number; room: number } | null = null
+        for (let t = 0; t < tries; t++) {
+          const a = offset + (t / tries) * Math.PI * 2
+          const x = from.x + Math.cos(a) * dist
+          const y = from.y + Math.sin(a) * dist
+          if (!free(x, y)) continue
+          const rm = room(x, y)
+          if (!fallback || rm > fallback.room) fallback = { x, y, room: rm }
+          if (rm >= GAP && (!ringBest || rm > ringBest.room)) ringBest = { x, y, room: rm }
+        }
+        if (ringBest) best = ringBest
+      }
+      best ??= fallback
+      if (!best) return // nowhere free at all: leave it be
+      placed.push({ x: best.x, y: best.y, r })
+      out.set(it.el, { x: best.x - it.w / 2, y: best.y - it.h / 2 })
+    })
+    return out
   }
 
   function updateBounds() {
@@ -397,7 +489,6 @@ export const Stage = forwardRef<StageHandle, { aspects: Record<string, number> }
         activeCursor: 'grabbing',
         onPress(this: Draggable) {
           vt.reset(this.x, this.y)
-          touched.current.add(this.target as HTMLElement)
           el.classList.add('held')
           sfx.grab(sfx.panOf(this.pointerX))
           gsap.to(inner, { scale: 1.07, duration: 0.35, ease: 'back.out(1.4)', overwrite: 'auto' })
@@ -409,9 +500,15 @@ export const Stage = forwardRef<StageHandle, { aspects: Record<string, number> }
           sfx.boing(sfx.panOf(this.pointerX))
           if (this.isThrowing) sfx.whoosh(0.35, true, 0.12, sfx.panOf(this.pointerX))
           gsap.to(inner, { scale: 1, duration: 0.9, ease: 'elastic.out(1, 0.75)', overwrite: 'auto' })
-          if (!this.isThrowing) settle()
+          if (!this.isThrowing) {
+            settle()
+            setHome(el)
+          }
         },
-        onThrowComplete: settle,
+        onThrowComplete() {
+          settle()
+          setHome(el)
+        },
       })
       drags.current.push(d)
     })
@@ -429,7 +526,6 @@ export const Stage = forwardRef<StageHandle, { aspects: Record<string, number> }
         edgeResistance: 0.7,
         onPress(this: Draggable) {
           vt.reset(this.x, this.y)
-          touched.current.add(this.target as HTMLElement)
           gsap.to(el, { scale: base() * 1.35, duration: 0.3, ease: 'back.out(1.4)', overwrite: 'auto' })
           sfx.pop(1.3, sfx.panOf(this.pointerX))
         },
@@ -438,6 +534,10 @@ export const Stage = forwardRef<StageHandle, { aspects: Record<string, number> }
         onRelease(this: Draggable) {
           sfx.pop(0.9, sfx.panOf(this.pointerX))
           gsap.to(el, { scale: base(), duration: 0.8, ease: 'elastic.out(1, 0.75)', overwrite: 'auto' })
+          if (!this.isThrowing) setHome(el)
+        },
+        onThrowComplete() {
+          setHome(el)
         },
       })
       drags.current.push(d)
@@ -461,10 +561,12 @@ export const Stage = forwardRef<StageHandle, { aspects: Record<string, number> }
         layout()
         charEls.current.forEach((el, i) => {
           const p = charHomes.current[i]
+          home.current.set(el, { x: p.x, y: p.y })
           gsap.to(el, { x: p.x, y: p.y, scale: p.scale, rotation: p.rotation, duration: 0.8, ease: 'power3.inOut' })
         })
         iconEls.current.forEach((el, i) => {
           const p = iconHomes.current[i]
+          home.current.set(el, { x: p.x, y: p.y })
           gsap.to(el, { x: p.x, y: p.y, scale: p.scale, duration: 0.8, ease: 'power3.inOut' })
         })
       }, 180)
