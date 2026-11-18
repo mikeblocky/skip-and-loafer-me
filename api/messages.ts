@@ -9,8 +9,8 @@
  *   POST /api/messages {action:'send', text, from, color, me}   → { id, total }
  *   POST /api/messages {action:'report', id, me}                → { ok }
  *
- * `me` is a random id the browser makes for itself (not personal): it keeps you from opening your
- * own letters and lets one reader report a letter only once. Letters are checked with the same
+ * `me` is a random id the browser makes for itself (not personal): it marks which letters are your
+ * own (they're in the mix too, but don't count as reads) and lets one reader report a letter only once. Letters are checked with the same
  * rules the page shows (src/letterRules.ts); a letter that three readers report is taken down.
  */
 import { createClient } from 'redis'
@@ -166,8 +166,8 @@ async function openOne(r: Client, me: string, not: string[]) {
       return []
     }
   })
-  // someone else's letter if there is one; your own only when nothing else is in there
-  const pick = nextFor(letters.filter((l) => l.by !== me), not) ?? nextFor(letters, not)
+  // everyone's letters are in the mix, your own included
+  const pick = nextFor(letters, not)
   if (!pick) return null
   const mine = pick.by === me
   if (!mine) await r.hIncrBy(KEY.opens, pick.id, 1)

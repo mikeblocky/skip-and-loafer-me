@@ -51,7 +51,7 @@ interface Letter {
   from: string | null
   color: string
   at: number
-  /** only your own letters were in the mailbox */
+  /** you wrote this one */
   mine?: boolean
 }
 
@@ -811,7 +811,7 @@ function Reader({ g, total, onChange, onWrite }: { g: Geo; total: number | null;
           </>
         )}
         {phase === 'checking' && <p className="rx-count">checking…</p>}
-        {phase === 'arrived' && <p className="rx-hint">{letter?.mine ? 'only yours in there right now. tap to open' : 'tap to open'}</p>}
+        {phase === 'arrived' && <p className="rx-hint">{letter?.mine ? 'this one’s yours! tap to open' : 'tap to open'}</p>}
         {phase === 'empty' && (
           <>
             <p className="rx-count">Nothing in there yet.</p>
