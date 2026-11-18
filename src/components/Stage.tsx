@@ -5,7 +5,7 @@ import { Icon, SCATTER_ICONS, type IconName } from '../icons'
 import { sfx } from '../sfx'
 import { openSecret } from '../secrets'
 
-export type Mode = 'countdown' | 'volumes' | 'birthdays' | 'anime'
+export type Mode = 'countdown' | 'volumes' | 'birthdays' | 'anime' | 'message'
 
 /** Which scattered sticker is the gacha capsule. Tapping it three times in a row opens the gacha. */
 const CAPSULE = 3
@@ -124,7 +124,7 @@ export const Stage = forwardRef<StageHandle, { aspects: Record<string, number> }
     if (mobile) return layoutPhone(vw, vh)
     const S = measureSafe()
     const safe: Rect = { left: S.left - 22, right: S.right + 22, top: S.top - 18, bottom: S.bottom + 18 }
-    const nav: Rect = { left: vw / 2 - 310, right: vw / 2 + 310, top: 0, bottom: 84 }
+    const nav: Rect = { left: vw / 2 - 370, right: vw / 2 + 370, top: 0, bottom: 84 }
     const placed: { x: number; y: number; r: number }[] = []
     const timer: Rect = { left: vw - 340, right: vw, top: 0, bottom: 76 }
     const blocked = (b: Rect) => overlaps(b, safe) || overlaps(b, nav) || (!mobile && overlaps(b, timer))
@@ -531,7 +531,7 @@ export const Stage = forwardRef<StageHandle, { aspects: Record<string, number> }
     // small icons also shouldn't land hidden behind the page's other content
     const solid = measureSafeRects('.view [data-safe]:not(:is(h1, h2, p))')
     const hidden = (r: Rect) => solid.some((s) => overlaps(r, s))
-    const nav: Rect = { left: vw / 2 - 310, right: vw / 2 + 310, top: 0, bottom: 84 }
+    const nav: Rect = { left: vw / 2 - 370, right: vw / 2 + 370, top: 0, bottom: 84 }
     const timer: Rect = { left: vw - 340, right: vw, top: 0, bottom: 76 }
     const box = (cx: number, cy: number, it: Item): Rect => ({
       left: cx - it.vw / 2,

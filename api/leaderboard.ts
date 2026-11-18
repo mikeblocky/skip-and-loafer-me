@@ -107,6 +107,7 @@ async function readBody(req: Req): Promise<unknown> {
 function send(res: Res, status: number, data: unknown) {
   res.statusCode = status
   res.setHeader('Content-Type', 'application/json; charset=utf-8')
+  res.setHeader('X-Content-Type-Options', 'nosniff')
   res.setHeader('Cache-Control', 'no-store')
   res.end(JSON.stringify(data))
 }
