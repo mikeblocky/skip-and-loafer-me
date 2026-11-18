@@ -14,7 +14,7 @@
  * rules the page shows (src/letterRules.ts); a letter that three readers report is taken down.
  */
 import { createClient } from 'redis'
-import { cleanSigner, cleanText, problem, safeColor } from '../src/letterRules'
+import { cleanSigner, cleanText, problem, safeColor } from '../src/letterRules.js'
 
 declare const process: { env: Record<string, string | undefined> }
 
