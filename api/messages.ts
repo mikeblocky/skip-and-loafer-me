@@ -135,8 +135,28 @@ const publicView = (l: Letter) => ({
   at: Number(l.at) || 0,
 })
 
+/** Fisher–Yates. Redis hands a small set back in the same order every time, so it's mixed here. */
+function shuffle<T>(list: T[]): T[] {
+  const a = [...list]
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[a[i], a[j]] = [a[j], a[i]]
+  }
+  return a
+}
+
+/**
+ * `read` is this reader's history, oldest first. Letters they haven't read come first, in random
+ * order; once they've read them all, the one they read longest ago comes back round, so a small
+ * mailbox cycles through every letter instead of repeating one.
+ */
+function nextFor(letters: Letter[], read: string[]): Letter | undefined {
+  const when = (l: Letter) => read.indexOf(l.id) // -1 = never read
+  return shuffle(letters).sort((a, b) => when(a) - when(b))[0]
+}
+
 async function openOne(r: Client, me: string, not: string[]) {
-  const picks: string[] = await r.sRandMemberCount(KEY.live, 12)
+  const picks: string[] = await r.sRandMemberCount(KEY.live, 40)
   if (!picks.length) return null
   const rows = (await r.hmGet(KEY.data, picks)) as (string | null)[]
   const letters = rows.flatMap((s) => {
@@ -146,9 +166,8 @@ async function openOne(r: Client, me: string, not: string[]) {
       return []
     }
   })
-  const others = letters.filter((l) => l.by !== me)
-  // a fresh one if there is one, then one you've read before, and your own only when nothing else is in there
-  const pick = others.find((l) => !not.includes(l.id)) ?? others[0] ?? letters[0]
+  // someone else's letter if there is one; your own only when nothing else is in there
+  const pick = nextFor(letters.filter((l) => l.by !== me), not) ?? nextFor(letters, not)
   if (!pick) return null
   const mine = pick.by === me
   if (!mine) await r.hIncrBy(KEY.opens, pick.id, 1)
