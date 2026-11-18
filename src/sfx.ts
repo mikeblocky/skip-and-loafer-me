@@ -406,6 +406,40 @@ export const sfx = {
       at += 0.025 + Math.random() * 0.05
     }
   },
+  /** A sheet being creased: a crisp crackle that ends on a soft press. */
+  fold(pan = 0) {
+    if (!live() || !gate('fold', 90)) return
+    noise({ dur: 0.16, f: 2600 * vary(0.1), f2: 4200, q: 0.9, g: 0.035 * vary(0.2), a: 0.05, pan })
+    noise({ dur: 0.035, f: 900, q: 1.4, g: 0.04, a: 0.002, delay: 0.15, pan })
+    tone({ f: 180 * vary(0.05), f2: 120, dur: 0.08, g: 0.04, a: 0.004, delay: 0.15, pan })
+  },
+  /** Paper sliding against paper: a long, soft, slightly rising hush. */
+  slide(dur = 0.5, g = 1) {
+    if (!live() || !gate('slide', 120)) return
+    noise({ dur, f: 1400 * vary(0.1), f2: 2400, q: 0.5, g: 0.03 * g * vary(0.15), a: dur * 0.35 })
+    noise({ dur: dur * 0.8, f: 5200, q: 1, g: 0.008 * g, a: dur * 0.3 })
+  },
+  /** A wax seal pressed down: a soft, heavy squish. */
+  stamp() {
+    if (!live() || !gate('stamp', 150)) return
+    tone({ f: 150 * vary(0.05), f2: 70, dur: 0.24, g: 0.16, a: 0.008 })
+    noise({ dur: 0.12, f: 520, q: 0.8, g: 0.05, a: 0.004, type: 'lowpass' })
+    pluck({ f: 880 * vary(0.02), dur: 0.12, g: 0.02, delay: 0.03, wood: 0.6 })
+  },
+  /** Wax breaking: two sharp little snaps. */
+  crack() {
+    if (!live() || !gate('crack', 150)) return
+    noise({ dur: 0.025, f: 3400, q: 3, g: 0.07, a: 0.001 })
+    noise({ dur: 0.03, f: 2400, q: 2.5, g: 0.05, a: 0.001, delay: 0.06 * vary(0.3) })
+    pluck({ f: 1320 * vary(0.03), dur: 0.08, g: 0.02, wood: 0.8 })
+  },
+  /** A tin mailbox door: a hollow knock with a short metallic ring. */
+  clank(pitch = 1) {
+    if (!live() || !gate('clank', 90)) return
+    noise({ dur: 0.05, f: 700 * pitch, q: 2, g: 0.06, a: 0.002 })
+    tone({ f: 523 * pitch * vary(0.02), dur: 0.45, g: 0.022, a: 0.002, type: 'triangle' })
+    tone({ f: 1390 * pitch * vary(0.02), dur: 0.3, g: 0.01, a: 0.002 })
+  },
   /**
    * Build-up under the opening funnel that leads straight into `jingle()`.
    * `lead` is the time in seconds until the jingle starts: the pad peaks there,

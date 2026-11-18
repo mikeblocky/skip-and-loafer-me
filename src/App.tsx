@@ -7,6 +7,7 @@ import { Countdown } from './components/Countdown'
 import { Volumes } from './components/Volumes'
 import { Birthdays } from './components/Birthdays'
 import { Anime } from './components/Anime'
+import { Message } from './components/Message'
 import { Bookmarks, type NavId } from './components/Bookmarks'
 import { Viewer } from './components/Viewer'
 import { preloadCovers } from './coverColors'
@@ -258,6 +259,7 @@ export default function App() {
         {view === 'volumes' && <Volumes hidden={book} onOpen={(i) => setBook(i)} />}
         {view === 'birthdays' && <Birthdays />}
         {view === 'anime' && <Anime />}
+        {view === 'message' && <Message />}
       </main>
 
       {book !== null && view === 'volumes' && (
