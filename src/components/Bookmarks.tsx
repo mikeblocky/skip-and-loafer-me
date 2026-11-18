@@ -3,13 +3,14 @@ import { gsap } from '../gsap'
 import { C } from '../data'
 import { Icon, type IconName } from '../icons'
 
-export type NavId = 'countdown' | 'volumes' | 'birthdays' | 'anime' | 'replay'
+export type NavId = 'countdown' | 'volumes' | 'birthdays' | 'anime' | 'message' | 'replay'
 
 const ITEMS: { id: NavId; label: string; color: string; icon: IconName; ink?: boolean; tilt: number }[] = [
   { id: 'countdown', label: 'Countdown', color: C.pink, icon: 'clock', tilt: -4 },
   { id: 'volumes', label: 'Volumes', color: C.blue, icon: 'book', tilt: 3 },
   { id: 'birthdays', label: 'Birthdays', color: C.green, icon: 'bow', tilt: 2 },
   { id: 'anime', label: 'Anime', color: C.orange, icon: 'film', tilt: -3 },
+  { id: 'message', label: 'Message', color: C.red, icon: 'envelope', tilt: 3 },
   { id: 'replay', label: 'Replay', color: C.violet, icon: 'replay', tilt: -2 },
 ]
 

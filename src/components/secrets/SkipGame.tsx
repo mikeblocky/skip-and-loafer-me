@@ -240,6 +240,22 @@ export function SkipGame() {
   })
   const [save, setSave] = useState<{ state: 'idle' | 'saving' | 'saved' | 'error'; rank?: number | null; msg?: string }>({ state: 'idle' })
 
+  /** The board keeps your best under your name from any device; this device's best catches up to it. */
+  const syncBest = (n: number | null | undefined) => {
+    if (!n || n <= secrets.get().skipBest) return
+    secrets.update((st) => ({ ...st, skipBest: n }))
+    setBest(n)
+  }
+  useEffect(() => {
+    let saved = ''
+    try {
+      saved = (localStorage.getItem(NAME_KEY) ?? '').trim().toLowerCase()
+    } catch {
+      /* private mode */
+    }
+    if (saved) syncBest(board.entries.find((e) => e.name.toLowerCase() === saved)?.score)
+  }, [board.entries])
+
   const g = useRef({
     y: 0,
     vy: 0,
@@ -402,6 +418,7 @@ export function SkipGame() {
       board.setEntries(d.entries)
       board.setState('ok')
       setSave({ state: 'saved', rank: d.rank })
+      syncBest(Number(d.best))
       sfx.chime(1.1, 0.7)
     } catch (e) {
       setSave({ state: 'error', msg: e instanceof Error ? e.message : 'could not save' })

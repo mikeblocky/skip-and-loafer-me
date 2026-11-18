@@ -11,20 +11,25 @@ function devApi(env: Record<string, string>): Plugin {
     configureServer(server) {
       const proc = (globalThis as unknown as { process: { env: Record<string, string | undefined> } }).process
       if (env.REDIS_URL) proc.env.REDIS_URL = env.REDIS_URL
-      server.middlewares.use('/api/leaderboard', async (req, res) => {
-        // a broken or failing function answers with an error; it must never take the dev server down
-        try {
-          const mod = await server.ssrLoadModule('/api/leaderboard.ts')
-          await mod.default(req, res)
-        } catch (e) {
-          server.config.logger.error(`[api] ${e instanceof Error ? e.message : String(e)}`)
-          if (!res.headersSent) {
-            res.statusCode = 500
-            res.setHeader('Content-Type', 'application/json')
+      for (const name of ['leaderboard', 'messages']) {
+        server.middlewares.use(`/api/${name}`, async (req, res) => {
+          // a broken or failing function answers with an error; it must never take the dev server down
+          try {
+            const mod = await server.ssrLoadModule(`/api/${name}.ts`)
+            // connect strips the mount path; the function expects the full URL like on the host
+            const r = req as unknown as { url?: string; originalUrl?: string }
+            r.url = r.originalUrl ?? r.url
+            await mod.default(req, res)
+          } catch (e) {
+            server.config.logger.error(`[api] ${e instanceof Error ? e.message : String(e)}`)
+            if (!res.headersSent) {
+              res.statusCode = 500
+              res.setHeader('Content-Type', 'application/json')
+            }
+            res.end(JSON.stringify({ error: `${name} unavailable` }))
           }
-          res.end(JSON.stringify({ error: 'leaderboard unavailable' }))
-        }
-      })
+        })
+      }
     },
   }
 }
